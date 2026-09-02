@@ -22,6 +22,9 @@ let editingEventId = null;  // bare Google event ID (no 'g-' prefix), null when 
 let editingCalId = null;    // calId like 'gcal_primary' of the event being edited
 let currentModalEvent = null; // FullCalendar event shown in the detail modal
 let writeableCals = [];     // [{ id: 'gcal_primary', name: 'My Calendar' }]
+// Whether the event being edited came with its guest list. Events cached before
+// guest support did not, and then the field must not be taken as "no guests".
+let editingGuestsKnown = false;
 
 function contrastColor(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -713,6 +716,7 @@ function setupModals() {
   document.getElementById('ef-allday').addEventListener('change', () => {
     applyAllDayMode(document.getElementById('ef-allday').checked);
   });
+  document.getElementById('ef-cal').addEventListener('change', syncGuestsField);
   document.getElementById('ef-form').addEventListener('submit', submitEventForm);
   document.getElementById('ef-delete').addEventListener('click', deleteCurrentEvent);
   setupFormKeyboardFlow();
@@ -758,7 +762,7 @@ function applyAllDayMode(allDay) {
 // before leaving it, so Tab is handled here for the two date fields. Reaching a
 // date field from the keyboard also opens the native picker.
 function setupFormKeyboardFlow() {
-  const order = ['ef-title', 'ef-allday', 'ef-start', 'ef-end', 'ef-cal', 'ef-loc', 'ef-desc'];
+  const order = ['ef-title', 'ef-allday', 'ef-start', 'ef-end', 'ef-cal', 'ef-guests', 'ef-loc', 'ef-desc'];
   let viaKeyboard = false;
   document.addEventListener('keydown', (e) => { if (e.key === 'Tab') viaKeyboard = true; }, true);
   document.addEventListener('mousedown', () => { viaKeyboard = false; }, true);
@@ -810,10 +814,13 @@ function openEventForm({ start = null, end = null, allDay = false, event = null 
   const calSel     = document.getElementById('ef-cal');
   const locInput   = document.getElementById('ef-loc');
   const descInput  = document.getElementById('ef-desc');
+  const guestInput = document.getElementById('ef-guests');
 
   titleInput.value = '';
   locInput.value   = '';
   descInput.value  = '';
+  guestInput.value = '';
+  editingGuestsKnown = !isEdit;
 
   if (isEdit) {
     const isCaldav = event.extendedProps.calId?.startsWith('cdav_');
@@ -823,6 +830,11 @@ function openEventForm({ start = null, end = null, allDay = false, event = null 
     titleInput.value = event.title || '';
     locInput.value   = event.extendedProps.location || '';
     descInput.value  = event.extendedProps.description || '';
+    const guests = event.extendedProps.attendees;
+    editingGuestsKnown = Array.isArray(guests);
+    if (editingGuestsKnown) {
+      guestInput.value = guests.filter((a) => !a.organizer).map((a) => a.email).join(', ');
+    }
     alldayChk.checked = event.allDay;
 
     if (event.allDay) {
@@ -866,8 +878,24 @@ function openEventForm({ start = null, end = null, allDay = false, event = null 
     if (calSel.options.length > 0) calSel.selectedIndex = 0;
   }
 
+  syncGuestsField();
   document.getElementById('event-form-modal').classList.remove('hidden');
   titleInput.focus();
+}
+
+// Only Google calendars can invite anyone: a CalDAV write is a plain file PUT
+// with no scheduling behind it, so an address typed there would reach no one.
+function syncGuestsField() {
+  const calSel = document.getElementById('ef-cal');
+  const input = document.getElementById('ef-guests');
+  const hint = document.getElementById('ef-guests-hint');
+  const calId = editingCalId || calSel.value || '';
+  const canInvite = calId.startsWith('gcal_');
+  input.disabled = !canInvite;
+  document.getElementById('ef-guests-field').classList.toggle('hidden', !canInvite && !input.value);
+  hint.textContent = canInvite
+    ? 'Guests get an email invitation and the event lands in their own calendar.'
+    : 'This calendar cannot send invitations.';
 }
 
 function closeEventForm() {
@@ -906,6 +934,13 @@ async function submitEventForm(e) {
   };
 
   const isCaldav = calId.startsWith('cdav_');
+
+  // Send the guest list only when it is meaningful: leaving the key out tells
+  // the server to keep whatever guests the event already has.
+  const guests = document.getElementById('ef-guests').value.trim();
+  if (!isCaldav && (editingGuestsKnown || guests)) {
+    body.attendees = guests ? guests.split(/[,;\s]+/).filter(Boolean) : [];
+  }
 
   try {
     let res;
@@ -1104,6 +1139,7 @@ function openModal(event) {
   document.getElementById('modal-time').textContent = formatEventTime(event);
 
   renderLocation(document.getElementById('modal-location'), p.location);
+  renderGuests(document.getElementById('modal-guests'), p.attendees);
   renderDescription(document.getElementById('modal-description'), p.description);
 
   const openEl = document.getElementById('modal-open');
@@ -1352,6 +1388,25 @@ function renderDescription(el, raw) {
     el.classList.add('desc-plain');
     appendLinkedText(decoded, el);
   }
+}
+
+const GUEST_MARK = { accepted: '\u2713', declined: '\u2717', tentative: '?', needsAction: '\u00b7' };
+
+function renderGuests(el, attendees) {
+  const list = Array.isArray(attendees) ? attendees : [];
+  el.textContent = '';
+  el.classList.toggle('hidden', list.length === 0);
+  if (list.length === 0) return;
+  el.appendChild(document.createTextNode('\u{1F465}'));
+  const wrap = document.createElement('span');
+  for (const a of list) {
+    const chip = document.createElement('span');
+    chip.className = `guest guest-${a.status}`;
+    chip.title = `${a.email}${a.organizer ? ' (organizer)' : ''} \u2014 ${a.status}`;
+    chip.textContent = `${GUEST_MARK[a.status] || '\u00b7'} ${a.name || a.email}`;
+    wrap.appendChild(chip);
+  }
+  el.appendChild(wrap);
 }
 
 function renderLocation(el, loc) {

@@ -299,6 +299,22 @@ function getGoogleCalColor(calId) {
   return cal?.color || COLORS.google;
 }
 
+// Guests arrive as a list of addresses typed into the form. Keep only what
+// looks like an address, so a stray word does not make Google reject the whole
+// write. `undefined` (key absent) means "leave the guest list as it is".
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeAttendees(input) {
+  if (input === undefined || input === null) return undefined;
+  const list = Array.isArray(input) ? input : String(input).split(/[,;\s]+/);
+  const seen = new Set();
+  for (const raw of list) {
+    const email = String(raw || '').trim().toLowerCase();
+    if (EMAIL_RE.test(email)) seen.add(email);
+  }
+  return [...seen];
+}
+
 function googleWriteError(err) {
   if (err.response?.status === 403)
     return { status: 403, message: 'Google Calendar write access denied. Reconnect Google in Settings.' };
@@ -308,12 +324,13 @@ function googleWriteError(err) {
 app.post('/api/google/events', async (req, res) => {
   if (!req.session.tokens?.google) return res.status(401).json({ error: 'Google not connected' });
   const { calId, title, start, end, allDay, location, description } = req.body || {};
+  const attendees = normalizeAttendees((req.body || {}).attendees);
   if (!calId || !title || !start) return res.status(400).json({ error: 'calId, title and start are required' });
   try {
     const fresh = await freshToken('google', req);
     const googleId = googleIdFromCalId(calId);
     const color = getGoogleCalColor(calId);
-    const event = await createGoogleEvent(fresh, calId, googleId, color, { title, start, end, allDay, location, description });
+    const event = await createGoogleEvent(fresh, calId, googleId, color, { title, start, end, allDay, location, description, attendees });
     res.status(201).json({ event });
   } catch (err) {
     const { status, message } = googleWriteError(err);
@@ -324,12 +341,13 @@ app.post('/api/google/events', async (req, res) => {
 app.put('/api/google/events/:eventId', async (req, res) => {
   if (!req.session.tokens?.google) return res.status(401).json({ error: 'Google not connected' });
   const { calId, title, start, end, allDay, location, description } = req.body || {};
+  const attendees = normalizeAttendees((req.body || {}).attendees);
   if (!calId || !title || !start) return res.status(400).json({ error: 'calId, title and start are required' });
   try {
     const fresh = await freshToken('google', req);
     const googleId = googleIdFromCalId(calId);
     const color = getGoogleCalColor(calId);
-    const event = await updateGoogleEvent(fresh, calId, googleId, color, req.params.eventId, { title, start, end, allDay, location, description });
+    const event = await updateGoogleEvent(fresh, calId, googleId, color, req.params.eventId, { title, start, end, allDay, location, description, attendees });
     res.json({ event });
   } catch (err) {
     const { status, message } = googleWriteError(err);

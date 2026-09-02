@@ -72,6 +72,7 @@
       <div class="modal-row" id="modal-cal"></div>
       <div class="modal-row" id="modal-time"></div>
       <div class="modal-row" id="modal-location"></div>
+      <div class="modal-row modal-guests" id="modal-guests"></div>
       <div class="modal-desc" id="modal-description"></div>
       <a class="modal-open" id="modal-open" href="#" target="_blank" rel="noopener">Open original ↗</a>
       <button class="modal-edit hidden" id="modal-edit">Edit</button>
@@ -112,6 +113,11 @@
         <div class="form-field">
           <label for="ef-cal">Calendar</label>
           <select id="ef-cal"></select>
+        </div>
+        <div class="form-field" id="ef-guests-field">
+          <label for="ef-guests">Guests</label>
+          <input type="text" id="ef-guests" placeholder="email@example.com, another@example.com" autocomplete="off" />
+          <small class="field-hint" id="ef-guests-hint"></small>
         </div>
         <div class="form-field">
           <label for="ef-loc">Location</label>

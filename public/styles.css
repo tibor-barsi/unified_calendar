@@ -523,6 +523,28 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   text-align: left;
 }
 .modal-row a { color: var(--ms); }
+
+.modal-guests { align-items: flex-start; }
+.modal-guests > span:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.guest {
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.guest-accepted { color: var(--g); border-color: #bbf7d0; }
+.guest-declined { color: #b91c1c; border-color: #fecaca; text-decoration: line-through; }
+.guest-tentative { color: #b45309; border-color: #fde68a; }
+.guest-needsAction { color: var(--muted); }
 .modal-open {
   display: inline-block;
   margin-top: 16px;
@@ -593,6 +615,8 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   box-sizing: border-box;
 }
 .form-field textarea { resize: vertical; }
+.field-hint { font-size: 0.75rem; color: var(--muted); }
+.form-field input:disabled { background: var(--bg); color: var(--muted); }
 
 .ef-actions {
   display: flex;

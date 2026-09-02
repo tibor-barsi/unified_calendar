@@ -65,24 +65,41 @@ function addOneDayToDateStr(dateStr) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-function buildGCalBody({ title, start, end, allDay, description, location }) {
-  if (allDay) {
-    // end from client is inclusive; Google needs exclusive (add 1 day)
-    return {
-      summary: title,
-      description: description || '',
-      location: location || '',
-      start: { date: start },
-      end: { date: addOneDayToDateStr(end || start) },
-    };
-  }
-  return {
+function buildGCalBody({ title, start, end, allDay, description, location, attendees }) {
+  const body = {
     summary: title,
     description: description || '',
     location: location || '',
-    start: { dateTime: start },
-    end: { dateTime: end || start },
   };
+  if (allDay) {
+    // end from client is inclusive; Google needs exclusive (add 1 day)
+    body.start = { date: start };
+    body.end = { date: addOneDayToDateStr(end || start) };
+  } else {
+    body.start = { dateTime: start };
+    body.end = { dateTime: end || start };
+  }
+  // Absent means "leave the guest list alone"; an empty array clears it.
+  if (Array.isArray(attendees)) body.attendees = attendees.map((email) => ({ email }));
+  return body;
+}
+
+// Google mails an invitation only when asked to. Skip the mail when no guest is
+// involved, so a solo event does not notify anyone about itself.
+function updatesParam(eventData) {
+  return { sendUpdates: eventData.attendees?.length ? 'all' : 'none' };
+}
+
+function attendeesToUnified(list) {
+  return (list || [])
+    .filter((a) => !a.resource)
+    .map((a) => ({
+      email: a.email || '',
+      name: a.displayName || '',
+      status: a.responseStatus || 'needsAction',
+      organizer: Boolean(a.organizer),
+      self: Boolean(a.self),
+    }));
 }
 
 function googleEventToUnified(e, calId, googleId, color) {
@@ -100,6 +117,7 @@ function googleEventToUnified(e, calId, googleId, color) {
     originalUrl: e.htmlLink || null,
     location: e.location || '',
     description: (e.description || '').trim(),
+    attendees: attendeesToUnified(e.attendees),
   };
 }
 
@@ -121,16 +139,19 @@ export async function createGoogleEvent(token, calId, googleId, color, eventData
   const { data } = await axios.post(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleId)}/events`,
     buildGCalBody(eventData),
-    { headers: { Authorization: `Bearer ${token.accessToken}` } }
+    { headers: { Authorization: `Bearer ${token.accessToken}` }, params: updatesParam(eventData) }
   );
   return googleEventToUnified(data, calId, googleId, color);
 }
 
+// PATCH rather than PUT: an edit made from a cached copy that predates guest
+// support omits `attendees` entirely, and a merge leaves the guests in place
+// instead of wiping them.
 export async function updateGoogleEvent(token, calId, googleId, color, eventId, eventData) {
-  const { data } = await axios.put(
+  const { data } = await axios.patch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleId)}/events/${encodeURIComponent(eventId)}`,
     buildGCalBody(eventData),
-    { headers: { Authorization: `Bearer ${token.accessToken}` } }
+    { headers: { Authorization: `Bearer ${token.accessToken}` }, params: updatesParam(eventData) }
   );
   return googleEventToUnified(data, calId, googleId, color);
 }
@@ -138,7 +159,8 @@ export async function updateGoogleEvent(token, calId, googleId, color, eventId, 
 export async function deleteGoogleEvent(token, googleId, eventId) {
   await axios.delete(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(googleId)}/events/${encodeURIComponent(eventId)}`,
-    { headers: { Authorization: `Bearer ${token.accessToken}` } }
+    // Guests get a cancellation; Google ignores the flag when there are none.
+    { headers: { Authorization: `Bearer ${token.accessToken}` }, params: { sendUpdates: 'all' } }
   );
 }
 
