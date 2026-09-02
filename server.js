@@ -238,8 +238,12 @@ app.put('/api/providers/:provider', (req, res) => {
 // Refresh a provider token and persist it so the new access token survives restarts.
 async function freshToken(provider, req) {
   const token = req.session.tokens[provider];
+  // ensureFresh refreshes in place and hands back the same object, so the old
+  // access token has to be captured up front — comparing against token.accessToken
+  // afterwards would compare the new value with itself and never persist.
+  const previousAccessToken = token.accessToken;
   const refreshed = await ensureFresh(provider, token);
-  if (refreshed !== token || refreshed.accessToken !== token.accessToken) {
+  if (refreshed !== token || refreshed.accessToken !== previousAccessToken) {
     req.session.tokens[provider] = refreshed;
     saveTokens(req.session.tokens);
   }
