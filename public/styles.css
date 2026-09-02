@@ -470,11 +470,59 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   padding-top: 12px;
   border-top: 1px solid var(--border);
   font-size: 0.9rem;
+  line-height: 1.5;
   color: var(--text);
-  white-space: pre-wrap;
-  max-height: 220px;
+  max-height: 45vh;
   overflow-y: auto;
+  overflow-wrap: anywhere;
 }
+/* Plain-text descriptions keep their own line breaks; HTML ones must not. */
+.modal-desc.desc-plain { white-space: pre-wrap; }
+
+/* Rendered description content */
+.modal-desc a { color: var(--ms); }
+.modal-desc a:hover { text-decoration: none; }
+.modal-desc p { margin: 0 0 8px; }
+.modal-desc p:last-child { margin-bottom: 0; }
+.modal-desc h1, .modal-desc h2, .modal-desc h3,
+.modal-desc h4, .modal-desc h5, .modal-desc h6 {
+  margin: 12px 0 6px;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+.modal-desc ul, .modal-desc ol { margin: 6px 0; padding-left: 22px; }
+.modal-desc li { margin: 2px 0; }
+.modal-desc hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.modal-desc blockquote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+.modal-desc pre {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-radius: 6px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+.modal-desc code { font-size: 0.85em; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+.modal-desc pre code { background: none; padding: 0; }
+.modal-desc table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.85rem;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.modal-desc th, .modal-desc td {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: left;
+}
+.modal-row a { color: var(--ms); }
 .modal-open {
   display: inline-block;
   margin-top: 16px;

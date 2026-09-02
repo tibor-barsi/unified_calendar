@@ -1030,13 +1030,8 @@ function openModal(event) {
     `<span class="swatch" style="background:${color}"></span> ${esc(p.source || '')}`;
   document.getElementById('modal-time').textContent = formatEventTime(event);
 
-  const locEl = document.getElementById('modal-location');
-  locEl.textContent = p.location ? `📍 ${p.location}` : '';
-  locEl.classList.toggle('hidden', !p.location);
-
-  const descEl = document.getElementById('modal-description');
-  descEl.textContent = p.description || '';
-  descEl.classList.toggle('hidden', !p.description);
+  renderLocation(document.getElementById('modal-location'), p.location);
+  renderDescription(document.getElementById('modal-description'), p.description);
 
   const openEl = document.getElementById('modal-open');
   if (p.originalUrl) {
@@ -1116,6 +1111,178 @@ function showOAuthError() {
     history.replaceState({}, '', '/');
   }
 }
+// ── Description rendering ──
+//
+// Descriptions arrive as HTML (Google, and Outlook-derived ICS feeds) or as
+// plain text (most ICS/CalDAV feeds). HTML is rebuilt against a tag allowlist
+// before it touches the DOM; plain text is linkified. Either way the result is
+// real markup, so links are clickable and formatting survives.
+
+const DESC_ALLOWED_TAGS = new Set([
+  'A', 'B', 'BLOCKQUOTE', 'BR', 'CAPTION', 'CODE', 'DD', 'DIV', 'DL', 'DT',
+  'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR', 'I', 'LI', 'OL', 'P', 'PRE',
+  'S', 'SMALL', 'SPAN', 'STRONG', 'SUB', 'SUP', 'TABLE', 'TBODY', 'TD',
+  'TFOOT', 'TH', 'THEAD', 'TR', 'U', 'UL',
+]);
+// Dropped along with their contents. IMG is in here on purpose: remote images
+// in calendar bodies are usually tracking pixels or broken mail assets.
+const DESC_DROP_TAGS = new Set([
+  'SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'FORM', 'INPUT', 'BUTTON',
+  'SELECT', 'TEXTAREA', 'LINK', 'META', 'TITLE', 'SVG', 'IMG', 'VIDEO', 'AUDIO',
+]);
+// Anything else (FONT, O:P, custom mail tags) is unwrapped: contents kept, tag dropped.
+const SAFE_URL_SCHEME = /^(?:https?:|mailto:|tel:)/i;
+const BARE_URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+|[^\s<>"'@,;]+@[^\s<>"'@,;]+\.[a-z]{2,}/gi;
+
+function looksLikeHtml(s) {
+  return /<\/?[a-z][a-z0-9]*(?:\s[^>]*)?>/i.test(s);
+}
+
+// Strip markup down to readable text — used for search matching.
+function descPlainText(s) {
+  const v = s || '';
+  if (!looksLikeHtml(v)) return v;
+  return new DOMParser().parseFromString(v, 'text/html').body.textContent || '';
+}
+
+function decodeEntities(s) {
+  if (!/&(?:[a-z]+|#\d+);/i.test(s)) return s;
+  const ta = document.createElement('textarea');
+  ta.innerHTML = s;
+  return ta.value;
+}
+
+function makeLink(href, label) {
+  const a = document.createElement('a');
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = label;
+  return a;
+}
+
+// Append text to `out`, turning bare URLs and email addresses into links.
+function appendLinkedText(text, out) {
+  let cursor = 0;
+  BARE_URL_RE.lastIndex = 0;
+  let m;
+  while ((m = BARE_URL_RE.exec(text))) {
+    // Trailing punctuation is nearly always sentence punctuation, not URL.
+    const match = m[0].replace(/[.,;:!?)\]}'"]+$/, '');
+    if (!match) { BARE_URL_RE.lastIndex = m.index + m[0].length; continue; }
+    if (m.index > cursor) out.appendChild(document.createTextNode(text.slice(cursor, m.index)));
+    let href;
+    if (/^https?:\/\//i.test(match)) href = match;
+    else if (/^www\./i.test(match)) href = `https://${match}`;
+    else href = `mailto:${match}`;
+    out.appendChild(makeLink(href, match));
+    cursor = m.index + match.length;
+    BARE_URL_RE.lastIndex = cursor;
+  }
+  if (cursor < text.length) out.appendChild(document.createTextNode(text.slice(cursor)));
+}
+
+// Copy `src`'s children into `dest`, keeping only allowlisted tags/attributes.
+function sanitizeInto(src, dest, insideLink) {
+  for (const child of Array.from(src.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      if (insideLink) dest.appendChild(document.createTextNode(child.nodeValue));
+      else appendLinkedText(child.nodeValue, dest);
+      continue;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+
+    const tag = child.tagName.toUpperCase();
+    if (DESC_DROP_TAGS.has(tag)) continue;
+    if (!DESC_ALLOWED_TAGS.has(tag)) { sanitizeInto(child, dest, insideLink); continue; }
+
+    if (tag === 'A') {
+      const href = (child.getAttribute('href') || '').trim();
+      // javascript:/data: hrefs lose the anchor but keep the text.
+      if (!SAFE_URL_SCHEME.test(href)) { sanitizeInto(child, dest, insideLink); continue; }
+      const a = makeLink(href, '');
+      const title = child.getAttribute('title');
+      if (title) a.title = title;
+      sanitizeInto(child, a, true);
+      if (!a.textContent.trim()) a.textContent = href;
+      dest.appendChild(a);
+      continue;
+    }
+
+    const el = document.createElement(tag);
+    if (tag === 'TD' || tag === 'TH') {
+      for (const attr of ['colspan', 'rowspan']) {
+        const v = child.getAttribute(attr);
+        if (v && /^\d{1,3}$/.test(v)) el.setAttribute(attr, v);
+      }
+    }
+    sanitizeInto(child, el, insideLink);
+    dest.appendChild(el);
+  }
+}
+
+// Mail-derived HTML is padded with empty paragraphs and long <br> runs.
+function trimFiller(root) {
+  root.querySelectorAll('p, div').forEach((n) => {
+    if (!n.textContent.trim() && !n.querySelector('a, hr, table')) n.remove();
+  });
+  collapseBreaks(root);
+}
+
+// Cap <br> runs at two and drop trailing ones, at every nesting level.
+function collapseBreaks(parent) {
+  if (parent.tagName === 'PRE') return;
+  let run = 0;
+  for (const n of Array.from(parent.childNodes)) {
+    if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR') {
+      run += 1;
+      if (run > 2) n.remove();
+    } else if (n.nodeType === Node.TEXT_NODE && !n.nodeValue.trim()) {
+      continue;
+    } else {
+      run = 0;
+      if (n.nodeType === Node.ELEMENT_NODE) collapseBreaks(n);
+    }
+  }
+  let last = parent.lastChild;
+  while (last && ((last.nodeType === Node.ELEMENT_NODE && last.tagName === 'BR')
+                  || (last.nodeType === Node.TEXT_NODE && !last.nodeValue.trim()))) {
+    last.remove();
+    last = parent.lastChild;
+  }
+}
+
+function renderDescription(el, raw) {
+  const text = (raw || '').trim();
+  el.textContent = '';
+  el.classList.toggle('hidden', !text);
+  if (!text) return;
+
+  if (looksLikeHtml(text)) {
+    el.classList.remove('desc-plain');
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    sanitizeInto(doc.body, el, false);
+    trimFiller(el);
+  } else {
+    // Plain text keeps its line breaks via CSS white-space: pre-wrap.
+    el.classList.add('desc-plain');
+    appendLinkedText(decodeEntities(text), el);
+  }
+}
+
+function renderLocation(el, loc) {
+  const text = (loc || '').trim();
+  el.textContent = '';
+  el.classList.toggle('hidden', !text);
+  if (!text) return;
+  // .modal-row is a flex row, so the text goes in one span rather than
+  // becoming several anonymous flex items with gaps between them.
+  el.appendChild(document.createTextNode('📍'));
+  const span = document.createElement('span');
+  appendLinkedText(text, span);
+  el.appendChild(span);
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
@@ -1123,6 +1290,21 @@ function esc(s) {
 }
 
 // ── Search ──
+
+// HTML descriptions are matched on their readable text, cached per description
+// string so a keystroke does not re-parse every cached event.
+const descTextCache = new Map();
+function searchableDesc(e) {
+  const raw = e.description || e.extendedProps?.description || '';
+  if (!raw) return '';
+  let text = descTextCache.get(raw);
+  if (text === undefined) {
+    text = descPlainText(raw).toLowerCase();
+    descTextCache.set(raw, text);
+  }
+  return text;
+}
+
 
 const QUICK_JUMPS = [
   { label: 'Today',      key: 'today' },
@@ -1237,7 +1419,7 @@ function runSearch(raw) {
         seen.add(e.id);
         if (
           (e.title || '').toLowerCase().includes(q) ||
-          (e.description || e.extendedProps?.description || '').toLowerCase().includes(q) ||
+          searchableDesc(e).includes(q) ||
           (e.location || e.extendedProps?.location || '').toLowerCase().includes(q) ||
           (e.source || e.extendedProps?.source || '').toLowerCase().includes(q)
         ) {
