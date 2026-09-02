@@ -1207,8 +1207,15 @@ const DESC_DROP_TAGS = new Set([
 const SAFE_URL_SCHEME = /^(?:https?:|mailto:|tel:)/i;
 const BARE_URL_RE = /(?:https?:\/\/|www\.)[^\s<>"']+|[^\s<>"'@,;]+@[^\s<>"'@,;]+\.[a-z]{2,}/gi;
 
+// Deliberately keyed to known tag names: a description saying "arrive <5 min
+// late>" is text, not markup, and must not be fed through the sanitizer.
+const HTML_TAG_RE = new RegExp(
+  '</?(?:a|b|i|u|s|em|strong|p|div|span|br|hr|ul|ol|li|dl|dt|dd|table|thead'
+  + '|tbody|tfoot|tr|td|th|h[1-6]|blockquote|pre|code|img|font|small|sub|sup'
+  + '|caption|center|figure|section|article|o:p)(?:\\s[^>]*)?/?>', 'i');
+
 function looksLikeHtml(s) {
-  return /<\/?[a-z][a-z0-9]*(?:\s[^>]*)?>/i.test(s);
+  return HTML_TAG_RE.test(s);
 }
 
 // Strip markup down to readable text — used for search matching.
@@ -1331,15 +1338,19 @@ function renderDescription(el, raw) {
   el.classList.toggle('hidden', !text);
   if (!text) return;
 
-  if (looksLikeHtml(text)) {
+  // Some feeds deliver HTML entity-encoded (&lt;p&gt;), so decode first and ask
+  // again — otherwise that markup would be shown as literal text.
+  const decoded = looksLikeHtml(text) ? text : decodeEntities(text);
+
+  if (looksLikeHtml(decoded)) {
     el.classList.remove('desc-plain');
-    const doc = new DOMParser().parseFromString(text, 'text/html');
+    const doc = new DOMParser().parseFromString(decoded, 'text/html');
     sanitizeInto(doc.body, el, false);
     trimFiller(el);
   } else {
     // Plain text keeps its line breaks via CSS white-space: pre-wrap.
     el.classList.add('desc-plain');
-    appendLinkedText(decodeEntities(text), el);
+    appendLinkedText(decoded, el);
   }
 }
 
