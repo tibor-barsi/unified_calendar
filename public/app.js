@@ -684,6 +684,7 @@ function setupModals() {
   });
   document.getElementById('ef-form').addEventListener('submit', submitEventForm);
   document.getElementById('ef-delete').addEventListener('click', deleteCurrentEvent);
+  setupFormKeyboardFlow();
 
   // New event button
   const newBtn = document.getElementById('new-event-btn');
@@ -718,6 +719,46 @@ function applyAllDayMode(allDay) {
     endInput.type = 'datetime-local';
     startInput.value = sv;
     endInput.value = ev;
+  }
+}
+
+// Tab moves through the form one field at a time. Left to the browser, Tab
+// walks the internal segments of a date input (day, month, year, hour, minute)
+// before leaving it, so Tab is handled here for the two date fields. Reaching a
+// date field from the keyboard also opens the native picker.
+function setupFormKeyboardFlow() {
+  const order = ['ef-title', 'ef-allday', 'ef-start', 'ef-end', 'ef-cal', 'ef-loc', 'ef-desc'];
+  let viaKeyboard = false;
+  document.addEventListener('keydown', (e) => { if (e.key === 'Tab') viaKeyboard = true; }, true);
+  document.addEventListener('mousedown', () => { viaKeyboard = false; }, true);
+
+  // The calendar select is disabled while editing, so skip over it.
+  const neighbour = (id, back) => {
+    let i = order.indexOf(id);
+    for (;;) {
+      i += back ? -1 : 1;
+      if (i < 0 || i >= order.length) return null;
+      const el = document.getElementById(order[i]);
+      if (el && !el.disabled) return el;
+    }
+  };
+
+  for (const id of ['ef-start', 'ef-end']) {
+    const input = document.getElementById(id);
+    if (!input) continue;
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const next = neighbour(id, e.shiftKey);
+      if (!next) return;
+      e.preventDefault();
+      next.focus();
+    });
+    input.addEventListener('focus', () => {
+      if (!viaKeyboard) return;
+      // showPicker() needs a recent user gesture, which the Tab keypress
+      // provides; it throws rather than no-ops when that has expired.
+      try { input.showPicker?.(); } catch {}
+    });
   }
 }
 
