@@ -11,6 +11,7 @@ const refreshingKeys = new Set();
 let googleReauthNeeded = false;
 
 const CACHE_KEY = 'calCache_v2';
+const CAL_PICKS_KEY = 'calPicks_v1';
 const PREFETCH_PAST_DAYS = 14;
 const PREFETCH_FUTURE_MONTHS = 6;
 let lastSyncedTime = null;
@@ -516,11 +517,41 @@ async function renderCalendars() {
   populateCalendarSelector();
 }
 
+// ── Calendar picker ordering ──
+//
+// The form's calendar dropdown is ordered by how often each calendar has been
+// chosen for a new event, most-used first, so the usual target sits on top and
+// is preselected. Ties break on the most recently picked, then on the order the
+// server sent, so one use is enough to move a calendar up.
+
+function loadCalPicks() {
+  try { return JSON.parse(localStorage.getItem(CAL_PICKS_KEY)) || {}; } catch { return {}; }
+}
+
+function recordCalPick(calId) {
+  if (!calId) return;
+  const picks = loadCalPicks();
+  const prev = picks[calId] || { count: 0, last: 0 };
+  picks[calId] = { count: prev.count + 1, last: Date.now() };
+  try { localStorage.setItem(CAL_PICKS_KEY, JSON.stringify(picks)); } catch {}
+  populateCalendarSelector();
+}
+
+function calendarsByUse() {
+  const picks = loadCalPicks();
+  const rank = (c) => picks[c.id] || { count: 0, last: 0 };
+  // Array#sort is stable, so untouched calendars keep their server order.
+  return [...writeableCals].sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    return rb.count - ra.count || rb.last - ra.last;
+  });
+}
+
 function populateCalendarSelector() {
   const sel = document.getElementById('ef-cal');
   if (!sel) return;
   sel.innerHTML = '';
-  for (const cal of writeableCals) {
+  for (const cal of calendarsByUse()) {
     const opt = document.createElement('option');
     opt.value = cal.id;
     opt.textContent = cal.name;
@@ -909,6 +940,7 @@ async function submitEventForm(e) {
     const data = await res.json();
     if (!res.ok) { showBanner(data.error || 'Failed to save event'); return; }
 
+    if (!editingEventId) recordCalPick(calId);
     if (editingEventId) removeFromCache(isCaldav ? `cdav-${editingEventId}` : `g-${editingEventId}`);
     if (data.event) insertIntoCache(data.event);
     closeEventForm();
