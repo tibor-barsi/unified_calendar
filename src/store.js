@@ -12,10 +12,22 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 let feeds = [];
 let nextId = 1;
 
+// The seven canonical calendar view ids (built-in FullCalendar views plus the
+// two custom multiMonth durations configured in app.js).
+const VIEW_IDS = [
+  'timeGridDay',
+  'timeGridWeek',
+  'dayGridMonth',
+  'multiMonth2',
+  'multiMonth4',
+  'multiMonthYear',
+  'listMonth',
+];
+
 // User calendar preferences. These map directly onto FullCalendar options.
 const DEFAULT_SETTINGS = {
   firstDay: 1, // 0 = Sunday, 1 = Monday
-  defaultView: 'timeGridWeek', // dayGridMonth | timeGridWeek | timeGridDay
+  defaultView: 'timeGridWeek', // one of VIEW_IDS
   timeFormat: '24h', // '24h' | '12h'
   showWeekends: true,
   syncInterval: 15, // minutes between background syncs; 0 = never
@@ -30,6 +42,14 @@ const DEFAULT_SETTINGS = {
   caldavAccounts: [],
   // Persisted OAuth tokens so Google/Microsoft survive server restarts.
   savedTokens: {},
+  theme: 'system', // 'system' | 'light' | 'dark'
+  // View-switcher buttons shown, in order. Must never end up empty.
+  enabledViews: ['timeGridDay', 'timeGridWeek', 'dayGridMonth', 'multiMonth2', 'multiMonth4', 'multiMonthYear', 'listMonth'],
+  spentDays: 'dim', // 'off' | 'dim' | 'strike' | 'hatch'
+  highlightToday: true,
+  compactDensity: 'emphasised', // 'emphasised' | 'dots' | 'titles'
+  importantEvents: [], // string[] of FullCalendar event ids
+  weekends: 'tint', // 'off' | 'tint' | 'muted' | 'divider'
 };
 let settings = clone(DEFAULT_SETTINGS);
 let nextCaldavId = 1;
@@ -39,6 +59,7 @@ function clone(obj) {
 }
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+const MAX_IMPORTANT_EVENTS = 5000;
 
 function persist() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -120,6 +141,27 @@ export function loadSettings() {
     settings.googleCalendars = Array.isArray(saved.googleCalendars) ? saved.googleCalendars : [];
     settings.caldavAccounts = Array.isArray(saved.caldavAccounts) ? saved.caldavAccounts : [];
     settings.savedTokens = saved.savedTokens && typeof saved.savedTokens === 'object' ? saved.savedTokens : {};
+    // Deep-merge view-configuration fields so settings.json written before this
+    // feature existed still gets valid defaults instead of undefined.
+    settings.theme = ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : DEFAULT_SETTINGS.theme;
+    const savedViews = Array.isArray(saved.enabledViews)
+      ? saved.enabledViews.filter((v) => VIEW_IDS.includes(v))
+      : [];
+    settings.enabledViews = savedViews.length ? savedViews : clone(DEFAULT_SETTINGS.enabledViews);
+    settings.spentDays = ['off', 'dim', 'strike', 'hatch'].includes(saved.spentDays)
+      ? saved.spentDays
+      : DEFAULT_SETTINGS.spentDays;
+    settings.highlightToday =
+      typeof saved.highlightToday === 'boolean' ? saved.highlightToday : DEFAULT_SETTINGS.highlightToday;
+    settings.compactDensity = ['emphasised', 'dots', 'titles'].includes(saved.compactDensity)
+      ? saved.compactDensity
+      : DEFAULT_SETTINGS.compactDensity;
+    settings.importantEvents = Array.isArray(saved.importantEvents)
+      ? saved.importantEvents.filter((id) => typeof id === 'string').slice(0, MAX_IMPORTANT_EVENTS)
+      : [];
+    settings.weekends = ['off', 'tint', 'muted', 'divider'].includes(saved.weekends)
+      ? saved.weekends
+      : DEFAULT_SETTINGS.weekends;
     nextCaldavId =
       settings.caldavAccounts.reduce((max, a) => Math.max(max, parseInt(String(a.id).slice(5), 10) || 0), 0) + 1;
   } catch {
@@ -136,11 +178,26 @@ export function getSettings() {
 export function updateSettings(patch = {}) {
   const next = { ...settings };
   if ([0, 1].includes(patch.firstDay)) next.firstDay = patch.firstDay;
-  if (['dayGridMonth', 'timeGridWeek', 'timeGridDay'].includes(patch.defaultView))
-    next.defaultView = patch.defaultView;
+  if (VIEW_IDS.includes(patch.defaultView)) next.defaultView = patch.defaultView;
   if (['24h', '12h'].includes(patch.timeFormat)) next.timeFormat = patch.timeFormat;
   if (typeof patch.showWeekends === 'boolean') next.showWeekends = patch.showWeekends;
   if ([0, 5, 15, 30, 60].includes(patch.syncInterval)) next.syncInterval = patch.syncInterval;
+  if (['system', 'light', 'dark'].includes(patch.theme)) next.theme = patch.theme;
+  if (Array.isArray(patch.enabledViews)) {
+    const views = patch.enabledViews.filter((v) => VIEW_IDS.includes(v));
+    // Never allow zero enabled views — that would leave no view-switcher buttons.
+    next.enabledViews = views.length ? views : clone(DEFAULT_SETTINGS.enabledViews);
+  }
+  if (['off', 'dim', 'strike', 'hatch'].includes(patch.spentDays)) next.spentDays = patch.spentDays;
+  if (typeof patch.highlightToday === 'boolean') next.highlightToday = patch.highlightToday;
+  if (['emphasised', 'dots', 'titles'].includes(patch.compactDensity))
+    next.compactDensity = patch.compactDensity;
+  if (Array.isArray(patch.importantEvents)) {
+    next.importantEvents = patch.importantEvents
+      .filter((id) => typeof id === 'string')
+      .slice(0, MAX_IMPORTANT_EVENTS);
+  }
+  if (['off', 'tint', 'muted', 'divider'].includes(patch.weekends)) next.weekends = patch.weekends;
   settings = next;
   persistSettings();
   return settings;

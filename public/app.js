@@ -12,6 +12,8 @@ let googleReauthNeeded = false;
 
 const CACHE_KEY = 'calCache_v2';
 const CAL_PICKS_KEY = 'calPicks_v1';
+const LAST_VIEW_KEY = 'cal_last_view';
+const SIDEBAR_STATE_KEY = 'cal_sidebar';
 const PREFETCH_PAST_DAYS = 14;
 const PREFETCH_FUTURE_MONTHS = 6;
 let lastSyncedTime = null;
@@ -101,6 +103,8 @@ async function fetchWithLocalCache(url, cacheKey, fallback = null) {
 document.addEventListener('DOMContentLoaded', async () => {
   showOAuthError();
   settings = await fetchWithLocalCache('/api/settings', 'cal_settings_cache') ?? {};
+  applyBodyAttributes();
+  reconcileTheme();
   loadPersistedCache();
   await renderCalendars();
   initCalendar();
@@ -108,6 +112,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupModals();
   setupJumpTo();
   setupSidebar();
+  setupSidebarCollapse();
   setupBackgroundSync(settings.syncInterval ?? 15);
   updateLastSyncedDisplay();
   setInterval(updateLastSyncedDisplay, 60000);
@@ -351,22 +356,222 @@ function closeSidebar() {
   document.getElementById('sidebar-backdrop').classList.remove('visible');
 }
 
+// ── Sidebar rail (expanded / icon-only) ──
+//
+// Independent of the mobile open/close drawer above: this fully hides the
+// sidebar, leaving only a small floating arrow to bring it back. Persisted so
+// it survives reloads, and restored on init.
+
+function applySidebarCollapsed(collapsed) {
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+
+  const btn = document.getElementById('sidebar-rail-toggle');
+  if (btn) {
+    btn.setAttribute('aria-label', 'Hide sidebar');
+    btn.title = 'Hide sidebar';
+    btn.setAttribute('aria-pressed', String(collapsed));
+  }
+  const restore = document.getElementById('sidebar-restore');
+  if (restore) restore.setAttribute('aria-expanded', String(!collapsed));
+
+  try { localStorage.setItem(SIDEBAR_STATE_KEY, collapsed ? 'collapsed' : 'expanded'); } catch { /* private mode, quota, etc. */ }
+
+  // The grid keeps its old pixel width until FullCalendar re-measures, which is
+  // what made the previous rail overflow the viewport. Re-measure after the
+  // layout has settled.
+  requestAnimationFrame(() => calendar?.updateSize());
+}
+
+function setupSidebarCollapse() {
+  let stored;
+  try { stored = localStorage.getItem(SIDEBAR_STATE_KEY); } catch { /* private mode */ }
+  applySidebarCollapsed(stored === 'collapsed');
+
+  document.getElementById('sidebar-rail-toggle')
+    ?.addEventListener('click', () => applySidebarCollapsed(true));
+  document.getElementById('sidebar-restore')
+    ?.addEventListener('click', () => applySidebarCollapsed(false));
+}
+
+// ── Body / theme attributes ──
+//
+// data-spent, data-density and data-today-hl drive CSS purely (visibility of
+// .day-spent etc. is decided in styles.css, not here) — this just mirrors
+// settings onto <body> so it stays in sync whenever settings are (re)loaded.
+
+function applyBodyAttributes() {
+  document.body.dataset.spent = settings.spentDays ?? 'dim';
+  document.body.dataset.density = settings.compactDensity ?? 'emphasised';
+  document.body.dataset.todayHl = settings.highlightToday === false ? 'off' : 'on';
+  document.body.dataset.weekends = settings.weekends ?? 'tint';
+}
+
+// Resolves settings.theme ('system' | 'light' | 'dark') to a concrete value.
+function resolveTheme(theme) {
+  if (theme === 'light' || theme === 'dark') return theme;
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+// data-theme on <html> must always be concrete. Written to localStorage so the
+// inline boot script in index.html's <head> can apply it before first paint on
+// the next load, without waiting on settings to arrive.
+function applyTheme(concrete) {
+  document.documentElement.dataset.theme = concrete;
+  try { localStorage.setItem('cal_theme', concrete); } catch { /* private mode, quota, etc. */ }
+}
+
+// Reconciles the pre-paint boot guess (localStorage / matchMedia only) against
+// the authoritative settings.theme once settings have loaded. While the theme
+// is 'system', also tracks live OS theme changes.
+let systemThemeQuery = null;
+function reconcileTheme() {
+  applyTheme(resolveTheme(settings.theme));
+  if (systemThemeQuery) systemThemeQuery.onchange = null;
+  if (settings.theme === 'system' && window.matchMedia) {
+    systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    systemThemeQuery.onchange = (e) => applyTheme(e.matches ? 'dark' : 'light');
+  } else {
+    systemThemeQuery = null;
+  }
+}
+
 // ── Calendar initialization ──
+
+// Canonical view order (must match src/store.js VIEW_IDS / CONTRACT.md §2). The
+// header toolbar's right slot is always built in this order regardless of the
+// order settings.enabledViews happens to list them in.
+const VIEW_ORDER = ['timeGridDay', 'timeGridWeek', 'dayGridMonth', 'multiMonth2', 'multiMonth4', 'multiMonthYear', 'listMonth'];
+
+// Builds the headerToolbar "right" button list from settings.enabledViews,
+// preserving VIEW_ORDER, so unchecking a view in Settings removes its button.
+// Falls back to the full canonical list when the setting is missing or empty.
+function buildToolbarRight(enabledViews) {
+  const enabled = Array.isArray(enabledViews) && enabledViews.length ? enabledViews : VIEW_ORDER;
+  const ordered = VIEW_ORDER.filter((id) => enabled.includes(id));
+  return (ordered.length ? ordered : VIEW_ORDER).join(',');
+}
+
+// Strictly-before-today (local midnight) test shared by dayCellClassNames.
+function isSpentDate(date) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date < today;
+}
+
+// Shared by both calendar instances (main + day-detail modal) so styling stays
+// consistent: 'evt-important' for ids the user flagged, 'evt-past' for events
+// that have already ended.
+function eventClassNames(arg) {
+  const classes = [];
+  if (Array.isArray(settings.importantEvents) && settings.importantEvents.includes(arg.event.id))
+    classes.push('evt-important');
+  const end = arg.event.end || arg.event.start;
+  if (end && end < new Date()) classes.push('evt-past');
+  return classes;
+}
+
+// Toggles .is-compact on the calendar root while the active view is any multiMonth* view.
+function updateCompactClass(viewType) {
+  document.getElementById('calendar')?.classList.toggle('is-compact', viewType.startsWith('multiMonth'));
+}
+
+// Resolves the view to open on load: the last view the user was on (from
+// localStorage), if it's still enabled; otherwise the "Default view" setting;
+// otherwise the hard-coded fallback. Read once at calendar init.
+function resolveInitialView() {
+  const enabled = Array.isArray(settings.enabledViews) && settings.enabledViews.length
+    ? settings.enabledViews
+    : VIEW_ORDER;
+  let stored;
+  try { stored = localStorage.getItem(LAST_VIEW_KEY); } catch { /* private mode, quota, etc. */ }
+  if (stored && enabled.includes(stored)) return stored;
+  return settings.defaultView || 'timeGridWeek';
+}
+
+// ── Important-event day markers (data-imp) ──
+//
+// styles.css renders a "★N" marker from data-imp in narrow (multi-month) day
+// cells when there isn't room for event titles/chips. This just maintains the
+// count; no styling here (CONTRACT2 §4c).
+
+function dateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Local-midnight-to-local-midnight day keys an event's chip occupies in the day
+// grid: all days from the start date up to (but excluding) the end date, at day
+// granularity — matching FullCalendar's own all-day/multi-day slicing, including
+// its convention that an end time of exactly local midnight excludes that day.
+function eventDateKeys(ev) {
+  const start = ev.start;
+  if (!start) return [];
+  const end = ev.end || start;
+  const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  let endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const endIsMidnight = end.getHours() === 0 && end.getMinutes() === 0 && end.getSeconds() === 0 && end.getMilliseconds() === 0;
+  if (endDate > startDate && endIsMidnight) endDate.setDate(endDate.getDate() - 1);
+  else if (endDate < startDate) endDate = startDate;
+  const keys = [];
+  const cur = new Date(startDate);
+  while (cur <= endDate) {
+    keys.push(dateKey(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return keys;
+}
+
+// Recomputes data-imp="N" on every .fc-daygrid-day cell from the currently
+// rendered events, clearing stale values first. Called from both eventsSet and
+// datesSet, since either can change which cells/events are current.
+function updateImportantDayCounts() {
+  const root = document.getElementById('calendar');
+  if (!root) return;
+  root
+    .querySelectorAll('.fc-daygrid-day[data-imp], .fc-daygrid-day-events[data-imp]')
+    .forEach((el) => el.removeAttribute('data-imp'));
+  if (!calendar || !Array.isArray(settings.importantEvents) || !settings.importantEvents.length) return;
+  const counts = {};
+  for (const ev of calendar.getEvents()) {
+    if (!settings.importantEvents.includes(ev.id)) continue;
+    for (const key of eventDateKeys(ev)) counts[key] = (counts[key] || 0) + 1;
+  }
+  for (const [key, n] of Object.entries(counts)) {
+    const cell = root.querySelector(`.fc-daygrid-day[data-date="${key}"]`);
+    if (!cell) continue;
+    cell.setAttribute('data-imp', String(n));
+    // The cell itself is the container query's container, and a container query
+    // can only style its DESCENDANTS — so the "★N" marker has to hang off the
+    // inner frame. attr() only reads the element it sits on, so mirror it there.
+    cell.querySelector('.fc-daygrid-day-events')?.setAttribute('data-imp', String(n));
+  }
+}
 
 function initCalendar() {
   const isMobile = window.innerWidth < 768;
   calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
-    initialView: settings.defaultView || 'timeGridWeek',
+    initialView: resolveInitialView(),
     firstDay: settings.firstDay ?? 1,
     weekends: settings.showWeekends !== false,
     weekNumbers: !isMobile,
     eventTimeFormat: timeFmt(),
     slotLabelFormat: timeFmt(),
     dayHeaderFormat: isMobile ? { weekday: 'short', day: 'numeric' } : undefined,
+    views: {
+      timeGridDay: { buttonText: 'Day' },
+      timeGridWeek: { buttonText: 'Week' },
+      dayGridMonth: { buttonText: 'Month' },
+      // Generic multiMonth type + duration — there is no multiMonthCount option.
+      // dateIncrement keeps prev/next stepping by one month while still
+      // *showing* 2 or 4 (duration is unchanged — CONTRACT2 §4a).
+      multiMonth2: { type: 'multiMonth', duration: { months: 2 }, dateIncrement: { months: 1 }, multiMonthMaxColumns: 2, buttonText: '2 mo' },
+      multiMonth4: { type: 'multiMonth', duration: { months: 4 }, dateIncrement: { months: 1 }, multiMonthMaxColumns: 2, buttonText: '4 mo' },
+      multiMonthYear: { buttonText: 'Year' },
+      listMonth: { buttonText: 'Agenda' },
+    },
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay',
+      right: buildToolbarRight(settings.enabledViews),
     },
     allDayText: '',
     height: '100%',
@@ -376,6 +581,8 @@ function initCalendar() {
     selectable: true,
     unselectAuto: true,
     editable: true,
+    dayCellClassNames: (arg) => (isSpentDate(arg.date) ? ['day-spent'] : []),
+    eventClassNames,
     eventDrop: handleEventChange,
     eventResize: handleEventChange,
     events: (info, success, failure) => loadEvents(info).then(success, failure),
@@ -395,8 +602,14 @@ function initCalendar() {
         openEventForm({ start: info.date, end, allDay: info.allDay });
       }
     },
-    datesSet: () => {
+    datesSet: (arg) => {
       syncJumpToSelectors();
+      updateCompactClass(arg.view.type);
+      try { localStorage.setItem(LAST_VIEW_KEY, arg.view.type); } catch { /* private mode, quota, etc. */ }
+      updateImportantDayCounts();
+    },
+    eventsSet: () => {
+      updateImportantDayCounts();
     },
   });
   calendar.render();
@@ -487,6 +700,9 @@ async function renderCalendars() {
 
     const li = document.createElement('li');
     li.className = 'cal-item';
+    // Exposes the calendar's color to CSS so the rail-mode swatch (.sidebar.is-rail
+    // .cal-toggle, styled by styles.css) can render without a JS-CSS name coupling.
+    li.style.setProperty('--cal-color', cal.color);
     li.innerHTML = `
       <input type="checkbox" class="cal-toggle" ${cal.visible ? 'checked' : ''} title="Show / hide" />
       <input type="color" class="cal-color" value="${cal.color}" title="Change color" />
@@ -701,6 +917,7 @@ function setupModals() {
     closeDetail();
     if (currentModalEvent) openEventForm({ event: currentModalEvent });
   };
+  document.getElementById('modal-important').onclick = () => { toggleImportant(); };
 
   // Day-view modal
   const dayOverlay = document.getElementById('day-modal');
@@ -1097,6 +1314,7 @@ function openDayModal(date) {
       slotLabelFormat: timeFmt(),
       selectable: true,
       editable: true,
+      eventClassNames,
       eventDrop: handleEventChange,
       eventResize: handleEventChange,
       events: (info, success, failure) => loadEvents(info).then(success, failure),
@@ -1154,7 +1372,44 @@ function openModal(event) {
   const isWriteable = p.calId && writeableCals.some((c) => c.id === p.calId);
   document.getElementById('modal-edit').classList.toggle('hidden', !isWriteable);
 
+  updateImportantButton();
+
   document.getElementById('event-modal').classList.remove('hidden');
+}
+
+// ── Manual important flag ──
+
+function isImportant(eventId) {
+  return Array.isArray(settings.importantEvents) && settings.importantEvents.includes(eventId);
+}
+
+function updateImportantButton() {
+  const btn = document.getElementById('modal-important');
+  if (!btn || !currentModalEvent) return;
+  btn.textContent = isImportant(currentModalEvent.id) ? '☆ Unmark important' : '★ Mark important';
+}
+
+// Flips the current modal event's important flag, persists it through the same
+// PUT /api/settings the Settings page uses, and refetches (cache-only — no
+// network round trip, since the range is already cached) so .evt-important
+// picks up immediately on both calendar instances.
+async function toggleImportant() {
+  if (!currentModalEvent) return;
+  const id = currentModalEvent.id;
+  const list = Array.isArray(settings.importantEvents) ? settings.importantEvents.slice() : [];
+  const idx = list.indexOf(id);
+  if (idx >= 0) list.splice(idx, 1); else list.push(id);
+  settings.importantEvents = list;
+  updateImportantButton();
+  calendar?.refetchEvents();
+  dayCal?.refetchEvents();
+  try {
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ importantEvents: list }),
+    });
+  } catch { /* local state already updated; next load will reconcile */ }
 }
 
 function formatEventTime(event) {

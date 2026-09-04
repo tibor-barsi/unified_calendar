@@ -12,6 +12,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('showWeekends').addEventListener('change', saveSettings);
   document.getElementById('syncInterval').addEventListener('change', saveSettings);
 
+  // View card auto-saves on change.
+  for (const check of document.querySelectorAll('.view-check')) {
+    check.addEventListener('change', () => {
+      updateViewCheckboxState();
+      saveViewSettings();
+    });
+  }
+  document.getElementById('spentDays').addEventListener('change', saveViewSettings);
+  document.getElementById('weekends').addEventListener('change', saveViewSettings);
+  document.getElementById('highlightToday').addEventListener('change', saveViewSettings);
+  document.getElementById('compactDensity').addEventListener('change', saveViewSettings);
+  document.getElementById('theme').addEventListener('change', saveViewSettings);
+
   // Accounts.
   document.getElementById('ms-connect').onclick = () => (location.href = '/auth/microsoft?return=settings');
   document.getElementById('g-connect').onclick = () => (location.href = '/auth/google?return=settings');
@@ -37,6 +50,78 @@ async function loadSettings() {
   document.getElementById('timeFormat').value = s.timeFormat;
   document.getElementById('showWeekends').checked = s.showWeekends !== false;
   document.getElementById('syncInterval').value = String(s.syncInterval ?? 15);
+
+  // View card.
+  const enabledViews = Array.isArray(s.enabledViews) ? s.enabledViews : [];
+  for (const check of document.querySelectorAll('.view-check')) {
+    check.checked = enabledViews.includes(check.dataset.viewId);
+  }
+  updateViewCheckboxState();
+  document.getElementById('spentDays').value = s.spentDays ?? 'dim';
+  document.getElementById('weekends').value = s.weekends ?? 'tint';
+  document.getElementById('highlightToday').checked = s.highlightToday !== false;
+  document.getElementById('compactDensity').value = s.compactDensity ?? 'emphasised';
+  document.getElementById('theme').value = s.theme ?? 'system';
+
+  applyTheme(s.theme ?? 'system');
+}
+
+// ── View ──
+
+// Keep at least one view enabled — once only one checkbox is checked, disable
+// it so the user physically cannot uncheck the last remaining view.
+function updateViewCheckboxState() {
+  const checks = [...document.querySelectorAll('.view-check')];
+  const checkedCount = checks.filter((c) => c.checked).length;
+  for (const c of checks) {
+    c.disabled = checkedCount === 1 && c.checked;
+  }
+}
+
+async function saveViewSettings() {
+  const errorEl = document.getElementById('view-error');
+  const enabledViews = [...document.querySelectorAll('.view-check:checked')].map((c) => c.dataset.viewId);
+  if (!enabledViews.length) {
+    errorEl.textContent = '⚠ At least one view must stay checked.';
+    return;
+  }
+  errorEl.textContent = '';
+
+  const theme = document.getElementById('theme').value;
+  const body = {
+    enabledViews,
+    spentDays: document.getElementById('spentDays').value,
+    weekends: document.getElementById('weekends').value,
+    highlightToday: document.getElementById('highlightToday').checked,
+    compactDensity: document.getElementById('compactDensity').value,
+    theme,
+  };
+  await fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  applyTheme(theme);
+
+  const note = document.getElementById('view-saved-note');
+  note.textContent = '✓ Saved';
+  clearTimeout(note._t);
+  note._t = setTimeout(() => (note.textContent = ''), 1500);
+}
+
+// Resolve 'system' | 'light' | 'dark' to a concrete theme, apply it to the
+// document, and cache the concrete value so the boot script in <head> can
+// apply it before first paint on the next load without a flash.
+function applyTheme(theme) {
+  const resolved = theme === 'light' || theme === 'dark'
+    ? theme
+    : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.dataset.theme = resolved;
+  try {
+    localStorage.setItem('cal_theme', resolved);
+  } catch {
+    // localStorage unavailable (private mode, etc.) — theme just won't persist across loads.
+  }
 }
 
 async function saveSettings() {
