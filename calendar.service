@@ -4,9 +4,10 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/Data/git_repos/calendar
-# Replace the path below with: which npm   (or: which node, then use node server.js)
-ExecStart=/usr/bin/npm start
+WorkingDirectory=%h/data/_Github/unified_calendar
+# node is installed via nvm, so /usr/bin/npm does not exist here. Call node
+# directly with an absolute path; update the version below after an nvm upgrade.
+ExecStart=%h/.nvm/versions/node/v24.11.1/bin/node server.js
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
