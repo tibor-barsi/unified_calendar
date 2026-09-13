@@ -102,6 +102,33 @@ Leave `AUTH_PASSWORD` unset (or remove it) to disable authentication entirely.
 
 ---
 
+## Reaching it from another machine
+
+The app binds to **`127.0.0.1`** — this machine only. That is deliberate: with no
+`AUTH_PASSWORD` set there is no login at all, and `data/settings.json` holds OAuth
+refresh tokens and, for CalDAV, a password in plaintext. Listening on every
+interface would hand a personal calendar to anyone who can reach the port.
+
+`HOST=0.0.0.0` opens it up. Only do that together with `AUTH_PASSWORD`, and
+preferably not on its own — the app speaks plain HTTP, so a password travels in
+clear text across the network. Either of these is better:
+
+- **A VPN — the simplest.** Leave `HOST` at `127.0.0.1` on the server and reach it
+  over Tailscale/WireGuard, or through an SSH tunnel:
+  `ssh -L 3000:127.0.0.1:3000 you@server`. Nothing is exposed publicly at all.
+- **A TLS reverse proxy.** Caddy or nginx terminates HTTPS and forwards to
+  `127.0.0.1:3000`; set `AUTH_PASSWORD` and `BASE_URL=https://...` so the session
+  cookie is marked `Secure`.
+
+Note that the Omarchy bar widget cannot authenticate: it fetches with plain `curl`
+and sends no cookie, so it gets 401 on every poll against an install that sets
+`AUTH_PASSWORD`. Run the widget against a loopback instance, not a protected one.
+
+Starting with a non-loopback `HOST` and no `AUTH_PASSWORD` prints a warning on
+boot; it does not stop the server.
+
+---
+
 ## Widget API
 
 Two JSON endpoints serve the desktop widget (`omarchy-widget/`). Both send

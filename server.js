@@ -649,8 +649,10 @@ app.post('/logout', express.json(), (req, res) => {
 });
 
 // Exported so a test can boot the real app on an OS-assigned port (PORT=0) and close it again.
-export const server = app.listen(config.port, () => {
+export const server = app.listen(config.port, config.host, () => {
   console.log(`\n  Unified Calendar running at ${config.baseUrl}\n`);
+  if (config.host !== '127.0.0.1' && config.host !== 'localhost' && !config.authPassword)
+    console.log(`  ⚠  Listening on ${config.host} with no AUTH_PASSWORD — anyone who can reach this port can read your calendar`);
   if (!isMicrosoftConfigured())
     console.log('  ⚠  Microsoft not configured — set MICROSOFT_CLIENT_ID / _SECRET in .env');
   if (!isGoogleConfigured())
