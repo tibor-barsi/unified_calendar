@@ -1,0 +1,24 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-plugin-enable %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+code="${STUB_ENABLE_EXIT:-0}"
+# Like the shell: --before names a bar entry that must still be in the layout of shell.json
+shell_json="$HOME/.config/omarchy/shell.json"
+if [[ "${2:-}" == --before && -f "$shell_json" ]] && ! jq -e --arg id "${3:-}" \
+  'any((.bar.layout? // {}) | objects | (.left?, .center?, .right?) | arrays | .[] | if type == "object" then .id else . end; . == $id)' \
+  "$shell_json" >/dev/null 2>&1; then
+  echo "omarchy-plugin-enable: could not find target widget ${3:-}" >&2
+  exit 1
+fi
+if [[ "${1:-}" == omarchy.clock ]]; then
+  if [[ "$code" == 0 && -n "${STUB_STOCK_CLOCK_STATE_FILE:-}" ]]; then
+    printf 'true' > "$STUB_STOCK_CLOCK_STATE_FILE"
+  fi
+  exit "$code"
+fi
+if [[ "$code" == 0 && -n "${STUB_PLUGIN_STATE_FILE:-}" ]]; then
+  printf 'true' > "$STUB_PLUGIN_STATE_FILE"
+fi
+exit "$code"

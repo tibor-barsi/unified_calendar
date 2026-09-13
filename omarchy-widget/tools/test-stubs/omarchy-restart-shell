@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-restart-shell %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+
+# Space-separated exit codes, one per call; the last one repeats
+read -r -a codes <<<"${STUB_RESTART_EXIT:-0}"
+count=1
+counter_file="${STUB_RESTART_COUNTER_FILE:-}"
+if [[ -n "$counter_file" ]]; then
+  [[ -f "$counter_file" ]] && count=$(( $(<"$counter_file") + 1 ))
+  printf '%s' "$count" > "$counter_file"
+fi
+(( count > ${#codes[@]} )) && count=${#codes[@]}
+code="${codes[count - 1]}"
+if (( code == 0 )) && [[ -n "${STUB_RESTART_MARKER:-}" ]]; then
+  : > "$STUB_RESTART_MARKER"
+fi
+exit "$code"

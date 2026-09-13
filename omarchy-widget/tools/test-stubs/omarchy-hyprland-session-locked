@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-hyprland-session-locked %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+
+# Space-separated exit codes, one per call; the last one repeats (0 locked, 1 unlocked)
+read -r -a codes <<<"${STUB_LOCKED_SEQUENCE:-1}"
+count=1
+counter_file="${STUB_LOCKED_COUNTER_FILE:-}"
+if [[ -n "$counter_file" ]]; then
+  [[ -f "$counter_file" ]] && count=$(( $(<"$counter_file") + 1 ))
+  printf '%s' "$count" > "$counter_file"
+fi
+(( count > ${#codes[@]} )) && count=${#codes[@]}
+exit "${codes[count - 1]}"

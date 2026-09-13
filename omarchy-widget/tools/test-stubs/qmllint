@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'qmllint %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+for (( i = 1; i <= ${STUB_QMLLINT_OUTPUT_LINES:-0}; i++ )); do
+  printf 'Warning: qmllint stub warning %s\n' "$i"
+done
+exit "${STUB_QMLLINT_EXIT:-0}"

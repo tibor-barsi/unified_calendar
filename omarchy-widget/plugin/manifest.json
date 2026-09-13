@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "unified.clock",
+  "name": "Calendar Clock",
+  "version": "0.1.0",
+  "author": "unified_calendar",
+  "description": "Omarchy's clock with events, important days and reminders from unified_calendar",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Calendar Clock",
+    "description": "Omarchy's clock with events, important days and reminders from unified_calendar",
+    "category": "Time",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.clock"
+  }
+}

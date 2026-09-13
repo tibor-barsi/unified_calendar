@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-plugin-disable %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+# A hung shell: the first call records its pid in the hang file and waits to be killed
+if [[ -n "${STUB_DISABLE_HANG_FILE:-}" && ! -e "$STUB_DISABLE_HANG_FILE" ]]; then
+  printf '%s\n' "$$" > "$STUB_DISABLE_HANG_FILE.tmp"
+  mv "$STUB_DISABLE_HANG_FILE.tmp" "$STUB_DISABLE_HANG_FILE"
+  exec sleep 60
+fi
+code="${STUB_DISABLE_EXIT:-0}"
+if [[ "${1:-}" == omarchy.clock ]]; then
+  if [[ "$code" == 0 && -n "${STUB_STOCK_CLOCK_STATE_FILE:-}" ]]; then
+    printf 'false' > "$STUB_STOCK_CLOCK_STATE_FILE"
+  fi
+  exit "$code"
+fi
+# A widget the shell does not list stays unlisted; disabling only drops its bar entry
+if [[ -n "${STUB_PLUGIN_STATE_FILE:-}" && -f "$STUB_PLUGIN_STATE_FILE" && "$(<"$STUB_PLUGIN_STATE_FILE")" == missing ]]; then
+  exit "$code"
+fi
+if [[ -n "${STUB_PLUGIN_STATE_FILE:-}" ]] && [[ "$code" == 0 || "${STUB_DISABLE_APPLIES:-0}" == 1 ]]; then
+  printf 'false' > "$STUB_PLUGIN_STATE_FILE"
+fi
+exit "$code"

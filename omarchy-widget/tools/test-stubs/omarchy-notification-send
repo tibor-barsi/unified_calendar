@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-notification-send %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+if [[ -n "${STUB_NOTIFY_ARGV_FILE:-}" ]]; then
+  printf '%s\n' "$@" > "$STUB_NOTIFY_ARGV_FILE"
+fi
+exit "${STUB_NOTIFY_EXIT:-0}"
