@@ -3,9 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Simple file-backed store for ICS subscription links so they survive restarts.
-// Only the feed list is persisted — never OAuth tokens or event data.
+// This module persists feeds, settings (including the starred-event id list) and OAuth tokens —
+// never event bodies. Event ids reach disk here via setEventImportant(); event bodies reach
+// DATA_DIR only via the opt-in widget cache, see widget-cache-store.js.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// Exported so every part of the app keeps its state together; overridable so tests can point this
+// at a throwaway mkdtemp() dir instead of the real data/ directory.
+export const DATA_DIR = process.env.UNIFIED_CALENDAR_DATA_DIR || path.join(__dirname, '..', 'data');
 const FILE = path.join(DATA_DIR, 'feeds.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
@@ -61,14 +65,47 @@ function clone(obj) {
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const MAX_IMPORTANT_EVENTS = 5000;
 
-function persist() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(FILE, JSON.stringify(feeds, null, 2));
+// The one eviction policy for settings.importantEvents, shared by loadSettings, updateSettings and
+// setEventImportant: drop non-strings, de-dupe keeping each id's most recent position, and evict
+// the OLDEST ids past the cap. The three paths write the same field, so they have to agree —
+// keeping the oldest here would throw away exactly the star a single-id write had just added.
+function normalizeImportantEvents(list) {
+  const ids = (Array.isArray(list) ? list : []).filter((id) => typeof id === 'string');
+  const deduped = [...new Set(ids.reverse())].reverse();
+  return deduped.slice(-MAX_IMPORTANT_EVENTS);
 }
 
-function persistSettings() {
+// Crash-safe private write: a temp file created 0600 from the outset (so it is never briefly
+// world-readable), then renamed over the target. The rename carries the 0600 with it, which is
+// how an existing looser file gets tightened.
+function writePrivate(target, name, data) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  const tmp = path.join(DATA_DIR, `.${name}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    fs.writeFileSync(tmp, data, { mode: 0o600 });
+    // umask can only clear bits, never add them, but an inherited tmp file would keep its own
+    // mode — so state it outright rather than relying on the create flag alone.
+    fs.chmodSync(tmp, 0o600);
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // Nothing to clean up if the temp file was never created.
+    }
+    throw err;
+  }
+}
+
+// feeds.json holds ICS subscription URLs. An Outlook/Google calendar feed URL is a capability:
+// anyone holding it can read that calendar without credentials, so it is as private as a password.
+function persist() {
+  writePrivate(FILE, 'feeds.json', JSON.stringify(feeds, null, 2));
+}
+
+// settings.json holds the OAuth access and refresh tokens and the CalDAV password in plaintext.
+function persistSettings() {
+  writePrivate(SETTINGS_FILE, 'settings.json', JSON.stringify(settings, null, 2));
 }
 
 export function loadFeeds() {
@@ -156,9 +193,7 @@ export function loadSettings() {
     settings.compactDensity = ['emphasised', 'dots', 'titles'].includes(saved.compactDensity)
       ? saved.compactDensity
       : DEFAULT_SETTINGS.compactDensity;
-    settings.importantEvents = Array.isArray(saved.importantEvents)
-      ? saved.importantEvents.filter((id) => typeof id === 'string').slice(0, MAX_IMPORTANT_EVENTS)
-      : [];
+    settings.importantEvents = normalizeImportantEvents(saved.importantEvents);
     settings.weekends = ['off', 'tint', 'muted', 'divider'].includes(saved.weekends)
       ? saved.weekends
       : DEFAULT_SETTINGS.weekends;
@@ -193,9 +228,7 @@ export function updateSettings(patch = {}) {
   if (['emphasised', 'dots', 'titles'].includes(patch.compactDensity))
     next.compactDensity = patch.compactDensity;
   if (Array.isArray(patch.importantEvents)) {
-    next.importantEvents = patch.importantEvents
-      .filter((id) => typeof id === 'string')
-      .slice(0, MAX_IMPORTANT_EVENTS);
+    next.importantEvents = normalizeImportantEvents(patch.importantEvents);
   }
   if (['off', 'tint', 'muted', 'divider'].includes(patch.weekends)) next.weekends = patch.weekends;
   settings = next;
@@ -294,6 +327,18 @@ export function findCaldavCalendar(calId) {
     if (cal) return { account, calendar: cal };
   }
   return null;
+}
+
+// Adds or removes a single id from settings.importantEvents, deduped and capped at MAX_IMPORTANT_EVENTS, then persists.
+export function setEventImportant(id, important) {
+  const current = Array.isArray(settings.importantEvents) ? settings.importantEvents : [];
+  // Re-append (not just append) so re-marking an id moves it to the most-recently-starred end.
+  const list = important
+    ? [...current.filter((existing) => existing !== id), id]
+    : current.filter((existing) => existing !== id);
+  settings = { ...settings, importantEvents: normalizeImportantEvents(list) };
+  persistSettings();
+  return settings.importantEvents;
 }
 
 /** Update an OAuth provider's color and/or visibility. */
