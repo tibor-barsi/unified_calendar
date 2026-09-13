@@ -42,6 +42,8 @@ import {
   findCaldavCalendar,
   getTokens,
   saveTokens,
+  setEventImportant,
+  DATA_DIR,
 } from './src/store.js';
 import {
   discoverCalendars,
@@ -49,15 +51,56 @@ import {
   updateCalDavEvent,
   deleteCalDavEvent,
 } from './src/caldav.js';
+import { registerWidgetRoutes, importantBodyError } from './src/widget-routes.js';
+import {
+  createWidgetCacheStore,
+  createNullCacheStore,
+  widgetCacheEnabled,
+} from './src/widget-cache-store.js';
+import { listCalendars } from './src/calendar-list.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json());
 
 loadFeeds();
 loadSettings();
 
 const ICS_PALETTE = ['#9333ea', '#ea580c', '#0891b2', '#db2777', '#ca8a04'];
+
+// Hoisted so isAuthorized can be handed to registerWidgetRoutes below.
+const parseCookies = (req) => {
+  const cookies = {};
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) cookies[part.slice(0, i).trim()] = part.slice(i + 1).trim();
+  }
+  return cookies;
+};
+let VALID_TOKEN;
+let isAuthorized;
+if (config.authPassword) {
+  VALID_TOKEN = createHmac('sha256', config.authPassword).update('calendar-auth-v1').digest('hex');
+  isAuthorized = (req) => parseCookies(req).cal_auth === VALID_TOKEN;
+}
+
+// Registered before the session middleware — these routes never touch req.session or set a cookie.
+registerWidgetRoutes(app, {
+  getUnifiedEvents,
+  getFeeds,
+  getSettings,
+  getGoogleCalendars,
+  getCaldavAccounts,
+  getTokens,
+  saveTokens,
+  listCalendars,
+  setEventImportant,
+  // Off unless UNIFIED_CALENDAR_WIDGET_CACHE is set: the null store keeps event data off disk.
+  cacheStore: widgetCacheEnabled() ? createWidgetCacheStore({ dir: DATA_DIR }) : createNullCacheStore(),
+  isAuthorized,
+  now: () => new Date(),
+});
+
+app.use(express.json());
 
 app.use(
   session({
@@ -71,18 +114,6 @@ app.use(passport.initialize());
 
 // ── Optional password authentication ──
 if (config.authPassword) {
-  const VALID_TOKEN = createHmac('sha256', config.authPassword)
-    .update('calendar-auth-v1').digest('hex');
-
-  const parseCookies = (req) => {
-    const cookies = {};
-    for (const part of (req.headers.cookie || '').split(';')) {
-      const i = part.indexOf('=');
-      if (i > 0) cookies[part.slice(0, i).trim()] = part.slice(i + 1).trim();
-    }
-    return cookies;
-  };
-
   const loginPage = (error = false) => `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -117,7 +148,7 @@ if (config.authPassword) {
 
   app.use((req, res, next) => {
     if (req.path === '/login') return next();
-    if (parseCookies(req).cal_auth === VALID_TOKEN) return next();
+    if (isAuthorized(req)) return next();
     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
     res.redirect('/login');
   });
@@ -227,6 +258,18 @@ app.get('/api/settings', (req, res) => {
 
 app.put('/api/settings', (req, res) => {
   res.json(updateSettings(req.body || {}));
+});
+
+// Stars/unstars ONE event id, the same read-modify-write the widget uses (POST /api/widget/important).
+// The web app must not save the whole importantEvents array from a page-load snapshot: that silently
+// discards every star made in the bar widget since the page loaded.
+app.post('/api/settings/important', (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const error = importantBodyError(body);
+  if (error) return res.status(400).json({ error });
+  const { id, important } = body;
+  // Responds with the updated list so the client can reconcile with stars made in the widget.
+  res.json({ id, important, importantEvents: setEventImportant(id, important) });
 });
 
 app.put('/api/providers/:provider', (req, res) => {
@@ -372,69 +415,7 @@ app.delete('/api/google/events/:eventId', async (req, res) => {
 
 // ── Calendars list (sidebar) ──
 app.get('/api/calendars', (req, res) => {
-  const tokens = req.session.tokens || {};
-  const { providers } = getSettings();
-  const calendars = [];
-
-  if (tokens.microsoft) {
-    calendars.push({
-      id: 'microsoft',
-      kind: 'provider',
-      name: tokens.microsoft.email || tokens.microsoft.name || 'Outlook',
-      color: providers.microsoft.color,
-      visible: providers.microsoft.visible !== false,
-    });
-  }
-
-  if (tokens.google) {
-    const gcals = getGoogleCalendars();
-    if (gcals.length) {
-      for (const gc of gcals) {
-        calendars.push({
-          id: gc.id,
-          kind: 'google-sub',
-          name: gc.name,
-          color: gc.color,
-          visible: gc.visible !== false,
-          googleId: gc.googleId,
-          writeable: true,
-        });
-      }
-    } else {
-      calendars.push({
-        id: 'gcal_primary',
-        kind: 'google-sub',
-        name: tokens.google.email || tokens.google.name || 'Google',
-        color: providers.google.color,
-        visible: providers.google.visible !== false,
-        googleId: 'primary',
-        writeable: true,
-      });
-    }
-  }
-
-  for (const f of getFeeds()) {
-    const u = f.url || '';
-    const webCalBase = u.includes('calendar.google.com') ? 'google'
-      : (u.includes('outlook.office365.com') || u.includes('outlook.office.com') || u.includes('outlook.live.com')) ? 'outlook'
-      : null;
-    calendars.push({ id: f.id, kind: 'ics', name: f.name, color: f.color, visible: f.visible !== false, webCalBase });
-  }
-
-  for (const account of getCaldavAccounts()) {
-    for (const cal of (account.calendars || []).filter((c) => c.selected)) {
-      calendars.push({
-        id: cal.id,
-        kind: 'caldav-sub',
-        name: cal.name,
-        color: cal.color || '#0891b2',
-        visible: cal.visible !== false,
-        writeable: true,
-      });
-    }
-  }
-
-  res.json({ calendars });
+  res.json({ calendars: listCalendars({ tokens: req.session.tokens || {} }) });
 });
 
 // ── ICS subscriptions ──
@@ -667,7 +648,8 @@ app.post('/logout', express.json(), (req, res) => {
   });
 });
 
-app.listen(config.port, () => {
+// Exported so a test can boot the real app on an OS-assigned port (PORT=0) and close it again.
+export const server = app.listen(config.port, () => {
   console.log(`\n  Unified Calendar running at ${config.baseUrl}\n`);
   if (!isMicrosoftConfigured())
     console.log('  ⚠  Microsoft not configured — set MICROSOFT_CLIENT_ID / _SECRET in .env');
