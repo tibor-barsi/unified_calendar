@@ -579,6 +579,86 @@ function homeRange(nowMs, weekStart, upcomingDays) {
   return { start: start, end: end }
 }
 
+// ---- keyboard navigation -----------------------------------------------------
+
+var NAV_UNITS = ["day", "week", "month", "year", "none"]
+
+// hjkl walk the grid a day and a week at a time; the arrow keys keep the
+// coarse steps they have on Omarchy's own clock, so the two families cover
+// the whole calendar without either one needing a modifier.
+var DEFAULT_NAV_KEYS = {
+  letters: { horizontal: "day", vertical: "week" },
+  arrows: { horizontal: "month", vertical: "year" }
+}
+
+function coerceNavUnit(value, fallback) {
+  var text = typeof value === "string" ? value.trim().toLowerCase() : ""
+  return NAV_UNITS.indexOf(text) === -1 ? fallback : text
+}
+
+function coerceNavPair(value, fallback) {
+  var input = value && typeof value === "object" && !Array.isArray(value) ? value : {}
+  return {
+    horizontal: coerceNavUnit(input.horizontal, fallback.horizontal),
+    vertical: coerceNavUnit(input.vertical, fallback.vertical)
+  }
+}
+
+// Each key family gets a unit per axis. An unrecognised unit falls back to
+// that slot's default rather than to "none": a typo in shell.json should
+// leave the key working, not silently dead.
+function parseNavKeys(value) {
+  var input = value && typeof value === "object" && !Array.isArray(value) ? value : {}
+  return {
+    letters: coerceNavPair(input.letters, DEFAULT_NAV_KEYS.letters),
+    arrows: coerceNavPair(input.arrows, DEFAULT_NAV_KEYS.arrows)
+  }
+}
+
+// Where the day cursor appears on the first keypress: today when today is on
+// screen, otherwise the 1st of the month being browsed — so summoning the
+// cursor never yanks the view back to the current month.
+function cursorSeed(todayKey, viewYear, viewMonth) {
+  var today = parseEventDate(todayKey)
+  if (today && today.getFullYear() === viewYear && today.getMonth() === viewMonth) return todayKey
+  return dayKey(new Date(viewYear, viewMonth, 1))
+}
+
+// "" for anything that cannot move: an unparseable key, a zero step, or the
+// "none" unit.
+function stepDayKey(key, unit, delta) {
+  var date = parseEventDate(key)
+  var step = Number(delta)
+  if (!date || !isFinite(step) || step === 0) return ""
+
+  if (unit === "day") return dayKey(addDays(date, step))
+  if (unit === "week") return dayKey(addDays(date, step * 7))
+  if (unit !== "month" && unit !== "year") return ""
+
+  // Clamp into the target month instead of letting Date roll over: a step
+  // from 31 March lands on the 28th/29th of February, not the 2nd of March.
+  var months = unit === "year" ? step * 12 : step
+  var target = new Date(date.getFullYear(), date.getMonth() + months, 1)
+  var lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()
+  return dayKey(new Date(target.getFullYear(), target.getMonth(), Math.min(date.getDate(), lastDay)))
+}
+
+// What a navigation key does, given what is selected:
+//   "none"   nothing moves
+//   "seed"   no cursor yet and a fine unit was pressed — put it on screen first
+//   "cursor" move the selected day by `unit`
+//   "view"   no cursor, coarse unit — step the month grid, as the stock clock does
+function navAction(unit, delta, hasSelection) {
+  var step = Number(delta)
+  if (!isFinite(step) || step === 0 || unit === "none") return { kind: "none", months: 0 }
+  if (NAV_UNITS.indexOf(unit) === -1) return { kind: "none", months: 0 }
+
+  var fine = unit === "day" || unit === "week"
+  if (hasSelection) return { kind: "cursor", months: 0 }
+  if (fine) return { kind: "seed", months: 0 }
+  return { kind: "view", months: unit === "year" ? step * 12 : step }
+}
+
 // ---- important flag ----------------------------------------------------------
 
 // New array; only the event whose id matches gets a (new) object with `important` replaced.

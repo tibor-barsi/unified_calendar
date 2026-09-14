@@ -9,9 +9,10 @@ import "CalendarModel.js" as CalendarModel
 // sit beside the weather panel — same hero-over-detail composition, same
 // spacing scale, same small-caps labels.
 //
-// The grid is a read-out rather than a picker: today is the only marked
-// day, and the only thing that moves is which month is on screen —
-// chevrons, the scroll wheel, and the arrow keys all step it.
+// The grid is a picker as well as a read-out: chevrons, the scroll wheel
+// and the arrow keys step the month on screen, while hjkl walk a day cursor
+// across the grid and open each day's events under it. Which unit each key
+// family moves by is configurable — see `navKeys` in the widget's settings.
 //
 // BarWidget.qml owns the bar label and hands this panel the button to
 // anchor against.
@@ -26,6 +27,10 @@ Panel {
   property string selectedDayKey: ""
   property bool upcomingExpanded: false
 
+  // Which calendar unit each arrow/hjkl axis moves by. Read from the widget's
+  // shell.json entry so it can be changed without touching the plugin.
+  readonly property var navKeys: CalendarModel.parseNavKeys(setting("navKeys", null))
+
   // The bar tracks the widget mounted in its slot — BarWidget.qml — not this
   // nested panel. Everything the bar identifies a panel by has to be that
   // widget: the popout coordinator (and with it the open-panel dot under the
@@ -39,8 +44,9 @@ Panel {
   property date today: new Date()
   readonly property string todayKey: Model.keyForDate(today)
 
-  // The month on screen. Stepping moves this and nothing else: the grid is
-  // a read-out, not a picker, so there is no per-day cursor to keep in sync.
+  // The month on screen. Stepping the month moves this and nothing else;
+  // moving the day cursor past a month edge drags it along, so the selected
+  // day is always on the visible grid.
   property int viewYear: today.getFullYear()
   property int viewMonth: today.getMonth()
 
@@ -138,9 +144,13 @@ Panel {
     root.goToToday()
   }
 
+  // Takes the day cursor with it when there is one: going home and leaving
+  // the selection behind on a month that is no longer on screen would strand
+  // the details panel under a grid that does not contain its day.
   function goToToday() {
     root.viewYear = today.getFullYear()
     root.viewMonth = today.getMonth()
+    if (root.selectedDayKey !== "") root.selectedDayKey = root.todayKey
     Qt.callLater(root.ensureVisibleRange)
   }
 
@@ -185,6 +195,37 @@ Panel {
     moveMonth(delta * 12)
   }
 
+  // Moves the day cursor and pulls the view along with it, so stepping off
+  // the end of a month scrolls the grid rather than losing the selection.
+  function setCursor(key) {
+    var date = CalendarModel.parseEventDate(key)
+    if (!date) return
+    root.selectedDayKey = key
+    root.viewYear = date.getFullYear()
+    root.viewMonth = date.getMonth()
+    Qt.callLater(root.ensureVisibleRange)
+  }
+
+  // One arrow or hjkl press, resolved against what the key family is
+  // configured to move by and whether a day is currently selected.
+  function navigate(unit, delta) {
+    var action = CalendarModel.navAction(unit, delta, root.selectedDayKey !== "")
+    if (action.kind === "none") return
+    if (action.kind === "view") {
+      root.moveMonth(action.months)
+      return
+    }
+    if (action.kind === "seed") {
+      // The first fine-grained press summons the cursor rather than moving
+      // it: landing on today (or on the browsed month) beats landing one day
+      // off it with nothing to have aimed from.
+      root.setCursor(CalendarModel.cursorSeed(root.todayKey, root.viewYear, root.viewMonth))
+      return
+    }
+    var next = CalendarModel.stepDayKey(root.selectedDayKey, unit, delta)
+    if (next !== "") root.setCursor(next)
+  }
+
   // Applied locally first so the panel redraws on the click itself; the
   // shell.json write comes back through the bar as the same value. With no
   // writable entry (the widget is not in the layout) it stays a session-only
@@ -221,7 +262,7 @@ Panel {
 
   function cancelEditingLife() {
     root.editingLife = false
-    Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { if (navCatcher) navCatcher.forceActiveFocus() })
   }
 
   // Shared by both fields: Tab hops to the other one, Enter commits the pair,
@@ -283,7 +324,7 @@ Panel {
     bar: root.bar
     open: root.opened
     centerOnBar: true
-    focusTarget: keyCatcher
+    focusTarget: navCatcher
     contentWidth: panel.fittedContentWidth(Style.space(560))
     contentHeight: panel.fittedContentHeight(calendarColumn.implicitHeight)
 
@@ -291,9 +332,13 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       blocked: root.editingLife
+      // Reached only when focus sits on the catcher itself rather than on
+      // navCatcher below. Arrows and hjkl are one signal here, so both take
+      // the arrow mapping — a fallback that agrees with the configured keys
+      // instead of quietly reverting to the stock month/year stepping.
       onMoveRequested: function(dx, dy) {
-        if (dx !== 0) root.moveMonth(dx)
-        if (dy !== 0) root.moveYear(dy)
+        if (dx !== 0) root.navigate(root.navKeys.arrows.horizontal, dx)
+        if (dy !== 0) root.navigate(root.navKeys.arrows.vertical, dy)
       }
       onActivateRequested: root.goToToday()
       onCloseRequested: {
@@ -309,6 +354,42 @@ Panel {
         else if (t === "t" || t === "T") root.goToToday()
         else if (t === "w" || t === "W") root.toggleWeekStart()
         else if (t === "u" || t === "U") root.toggleUpcoming()
+      }
+
+      // Holds the focus, so it sees keys before the catcher it sits in and
+      // can tell an arrow from its hjkl twin, which PanelKeyCatcher folds into
+      // one signal. Anything it does not accept bubbles up to the catcher and
+      // is handled there as usual. No geometry: it is a key handler, not a
+      // surface, and must not sit over the panel's mouse areas.
+      Item {
+        id: navCatcher
+        width: 0
+        height: 0
+
+        Keys.onPressed: function(event) {
+          if (root.editingLife) return
+
+          var arrows = root.navKeys.arrows
+          var letters = root.navKeys.letters
+          var unit = ""
+          var delta = 0
+
+          if (event.key === Qt.Key_Left) { unit = arrows.horizontal; delta = -1 }
+          else if (event.key === Qt.Key_Right) { unit = arrows.horizontal; delta = 1 }
+          else if (event.key === Qt.Key_Up) { unit = arrows.vertical; delta = -1 }
+          else if (event.key === Qt.Key_Down) { unit = arrows.vertical; delta = 1 }
+          else if (event.text === "h") { unit = letters.horizontal; delta = -1 }
+          else if (event.text === "l") { unit = letters.horizontal; delta = 1 }
+          else if (event.text === "k") { unit = letters.vertical; delta = -1 }
+          else if (event.text === "j") { unit = letters.vertical; delta = 1 }
+          else return
+
+          // Accepted even when the unit is "none": the key was claimed by the
+          // calendar, and letting it fall through would hand h/j/k/l back to
+          // the catcher as a month step the user has just turned off.
+          root.navigate(unit, delta)
+          event.accepted = true
+        }
       }
 
       Flickable {
