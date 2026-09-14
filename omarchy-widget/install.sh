@@ -28,6 +28,8 @@ BINDINGS="${UNIFIED_WIDGET_BINDINGS:-$HOME/.config/hypr/bindings.lua}"
 CLOCK_DIR="${UNIFIED_WIDGET_OMARCHY_CLOCK_DIR:-/usr/share/omarchy/shell/plugins/panels/clock}"
 STATE_DIR="${UNIFIED_WIDGET_STATE_DIR:-$HOME/.local/state/unified-calendar-widget}"
 
+UNIT_MARKER="# Managed by omarchy-widget/install.sh — regenerated on each run."
+
 BIND_KEY="SUPER + SHIFT + C"
 BIND_BEGIN="-- >>> unified-calendar-widget (added by omarchy-widget/install.sh)"
 BIND_END="-- <<< unified-calendar-widget"
@@ -86,6 +88,25 @@ backup() {
   info "backed up $(basename "$file") -> $(basename "$dest")"
 }
 
+generate_unit() {
+  printf '%s\n' "$UNIT_MARKER"
+  printf '[Unit]\n'
+  printf 'Description=Unified Calendar server (http://localhost:%s)\n' "$port"
+  printf 'After=network.target\n\n'
+  printf '[Service]\n'
+  printf 'Type=simple\n'
+  printf 'WorkingDirectory=%s\n' "$repo_dir"
+  printf 'ExecStart=%s server.js\n' "$node_bin"
+  printf 'Restart=on-failure\n'
+  printf 'RestartSec=5\n'
+  printf 'Environment=NODE_ENV=production\n'
+  printf 'Environment=PORT=%s\n' "$port"
+  (( offline_cache )) && printf 'Environment=UNIFIED_CALENDAR_WIDGET_CACHE=1\n'
+  printf '\n[Install]\n'
+  printf 'WantedBy=default.target\n'
+  return 0
+}
+
 while (( $# )); do
   case "$1" in
     --port) [[ -n "${2:-}" ]] || die "--port needs a number"; port="$2"; shift 2 ;;
@@ -109,9 +130,11 @@ remove_keybind() {
   [[ -f "$BINDINGS" ]] || return 0
   grep -qF "$BIND_BEGIN" "$BINDINGS" || return 0
   backup "$BINDINGS"
-  # Drop the marked block and the blank line that precedes it.
+  # Drop the marked block, markers included, and nothing else. The blank line that
+  # preceded it stays — harmless, and far better than guessing at a line we did not
+  # write. Everything outside the markers is copied through verbatim.
   awk -v b="$BIND_BEGIN" -v e="$BIND_END" '
-    index($0, b) { drop = 1; if (blank) blank = 0; next }
+    index($0, b) { drop = 1; next }
     index($0, e) { drop = 0; next }
     drop { next }
     { print }
@@ -245,7 +268,17 @@ if (( skip_npm )); then
   say "Skipping npm install"
 else
   say "Installing Node dependencies"
-  ( cd "$repo_dir" && npm install --no-audit --no-fund ) || die "npm install failed"
+  # `npm ci` installs exactly the locked versions and never rewrites
+  # package-lock.json — which is tracked, so `npm install` could otherwise leave a
+  # dirty checkout that looks like the user changed something. Fall back only when
+  # there is no lockfile to honour.
+  if [[ -f "$repo_dir/package-lock.json" ]]; then
+    ( cd "$repo_dir" && npm ci --no-audit --no-fund ) \
+      || ( cd "$repo_dir" && npm install --no-audit --no-fund ) \
+      || die "npm install failed"
+  else
+    ( cd "$repo_dir" && npm install --no-audit --no-fund ) || die "npm install failed"
+  fi
 fi
 
 # ── 4. the systemd user service ──────────────────────────────────────────────
@@ -266,24 +299,23 @@ if [[ -z "$offline_cache" ]]; then
 fi
 
 mkdir -p "$UNIT_DIR"
-backup "$UNIT"
 
-{
-  printf '[Unit]\n'
-  printf 'Description=Unified Calendar server (http://localhost:%s)\n' "$port"
-  printf 'After=network.target\n\n'
-  printf '[Service]\n'
-  printf 'Type=simple\n'
-  printf 'WorkingDirectory=%s\n' "$repo_dir"
-  printf 'ExecStart=%s server.js\n' "$node_bin"
-  printf 'Restart=on-failure\n'
-  printf 'RestartSec=5\n'
-  printf 'Environment=NODE_ENV=production\n'
-  printf 'Environment=PORT=%s\n' "$port"
-  (( offline_cache )) && printf 'Environment=UNIFIED_CALENDAR_WIDGET_CACHE=1\n'
-  printf '\n[Install]\n'
-  printf 'WantedBy=default.target\n'
-} > "$UNIT"
+# A unit this script wrote can be regenerated freely. One somebody wrote or tuned
+# by hand must not be silently replaced — people add their own Environment lines,
+# resource limits and ordering deps, and a .bak they never look at is no comfort.
+if [[ -f "$UNIT" ]] && ! grep -qF "$UNIT_MARKER" "$UNIT"; then
+  warn "$UNIT already exists and was not written by install.sh."
+  warn "Replacing it would drop anything you changed there. It differs like this:"
+  printf '\n'
+  diff -u --label "yours: $UNIT" --label 'install.sh would write' "$UNIT" <(generate_unit) \
+    | sed 's/^/    /' || true
+  printf '\n'
+  confirm "Replace it? (a timestamped backup is kept either way)" \
+    || die "left $UNIT alone — re-run with --skip-npm once you have merged your changes, or move it aside"
+fi
+
+backup "$UNIT"
+generate_unit > "$UNIT"
 
 info "wrote $UNIT"
 (( offline_cache )) && info "offline event cache: on" || info "offline event cache: off"
@@ -344,7 +376,27 @@ say "Pointing the widget at $server_url"
 
 if [[ ! -f "$SHELL_JSON" ]]; then
   warn "no $SHELL_JSON — set serverUrl on the $PLUGIN_ID entry yourself"
+elif ! jq -e . "$SHELL_JSON" >/dev/null 2>&1; then
+  warn "$SHELL_JSON is not valid JSON — not touching it."
+  info "set serverUrl on the $PLUGIN_ID entry yourself: \"serverUrl\": \"$server_url\""
+  skip_shell_json=1
 else
+  # Writing jq's output reformats the whole file. That is invisible when the file is
+  # already in jq's own style (Omarchy writes it that way), but it would reflow a
+  # config somebody has hand-formatted. Check first and ask rather than quietly
+  # restyling someone's settings.
+  if ! diff -q <(jq . "$SHELL_JSON" 2>/dev/null) "$SHELL_JSON" >/dev/null 2>&1; then
+    warn "$SHELL_JSON is not in jq's formatting, so setting serverUrl would reformat it."
+    warn "The settings themselves would be unchanged, and a backup is kept."
+    if ! confirm "Reformat it?"; then
+      info "left $SHELL_JSON alone — set serverUrl on the $PLUGIN_ID entry yourself:"
+      info "  \"serverUrl\": \"$server_url\""
+      skip_shell_json=1
+    fi
+  fi
+fi
+
+if [[ -f "$SHELL_JSON" && -z "${skip_shell_json:-}" ]]; then
   backup "$SHELL_JSON"
   tmp="$SHELL_JSON.tmp.$$"
   # The widget's settings live inline on its bar.layout entry. An entry may be a
@@ -365,6 +417,7 @@ else
     rm -f -- "$tmp"
     die "the shell.json edit would have changed more than serverUrl — left it alone"
   fi
+  chmod --reference="$SHELL_JSON" "$tmp" 2>/dev/null || true
   mv -- "$tmp" "$SHELL_JSON"
   if jq -e --arg id "$PLUGIN_ID" --arg url "$server_url" '
         [.bar.layout[]?[]? | select(type == "object" and .id == $id and .serverUrl == $url)] | length > 0

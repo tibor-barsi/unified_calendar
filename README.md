@@ -189,25 +189,32 @@ it (the widget rewrites it on the next poll).
 
 ## Running as a daily-driver service
 
-The app is meant to run permanently in the background on port **8585** and be
+The app is meant to run permanently in the background on port **3000** and be
 managed with `systemctl`.
 
 ### Install the service (one-time)
 
+`calendar.service` is a template: it cannot know where you cloned this or where
+your `node` lives, so edit `WorkingDirectory` and `ExecStart` before copying it.
+
 ```bash
 cp calendar.service ~/.config/systemd/user/
+$EDITOR ~/.config/systemd/user/calendar.service   # set WorkingDirectory + ExecStart
 systemctl --user daemon-reload
 systemctl --user enable --now calendar
-systemctl --user restart calendar
 ```
 
 The service auto-starts on login and restarts if it crashes.
+
+> **On Omarchy?** `omarchy-widget/install.sh` does all of the above — writing the
+> unit with the right paths, picking the port, starting the service — and then
+> installs the bar widget. See [`omarchy-widget/README.md`](omarchy-widget/README.md).
 
 ### Day-to-day commands
 
 | What            | Command                                   |
 |-----------------|-------------------------------------------|
-| Open in browser | <http://localhost:8585>                   |
+| Open in browser | <http://localhost:3000>                   |
 | Start           | `systemctl --user start calendar`         |
 | Stop            | `systemctl --user stop calendar`          |
 | Restart         | `systemctl --user restart calendar`       |
@@ -223,7 +230,7 @@ cp calendar.desktop ~/.local/share/applications/
 update-desktop-database ~/.local/share/applications/
 ```
 
-Clicking it opens `http://localhost:8585` in your default browser (the service
+Clicking it opens `http://localhost:3000` in your default browser (the service
 must already be running).
 
 ---
@@ -232,7 +239,7 @@ must already be running).
 
 Want events showing in under a minute, without registering any app? Use this.
 
-1. Start the service (see above), then open <http://localhost:8585>.
+1. Start the service (see above), then open <http://localhost:3000>.
 2. Expand **"➕ Subscribe to a calendar by ICS link"**, paste a published
    `.ics` URL, give it a label, click **Add**. Both `https://` and `webcal://`
    links work.
@@ -257,7 +264,7 @@ richer/live access but need one-time setup.
    (this matches `MICROSOFT_TENANT=common`). Pick *single tenant* only if it's
    solely for your org — then set `MICROSOFT_TENANT` to your tenant ID.
 4. **Redirect URI:** platform **Web**, value:
-   `http://localhost:8585/auth/microsoft/callback`
+   `http://localhost:3000/auth/microsoft/callback`
 5. Click **Register**.
 6. Copy the **Application (client) ID** → this is `MICROSOFT_CLIENT_ID`.
 7. Left menu → **Certificates & secrets** → **New client secret** → copy the
@@ -283,7 +290,7 @@ richer/live access but need one-time setup.
    **OAuth client ID**:
    - **Application type:** Web application.
    - **Authorised redirect URIs:** add
-     `http://localhost:8585/auth/google/callback`
+     `http://localhost:3000/auth/google/callback`
    - **Create**.
 5. Copy the **Client ID** → `GOOGLE_CLIENT_ID` and the
    **Client secret** → `GOOGLE_CLIENT_SECRET`.
@@ -299,8 +306,8 @@ cp .env.example .env
 Open `.env` and fill in:
 
 ```ini
-PORT=8585
-BASE_URL=http://localhost:8585
+PORT=3000
+BASE_URL=http://localhost:3000
 SESSION_SECRET=<any long random string>
 
 MICROSOFT_CLIENT_ID=...        # from Azure step 6
@@ -327,7 +334,7 @@ npm install
 npm start          # or: npm run dev   (auto-restart on file changes)
 ```
 
-Open <http://localhost:8585>. Click **Connect** next to Outlook and/or Google,
+Open <http://localhost:3000>. Click **Connect** next to Outlook and/or Google,
 approve the consent screen, and your merged events appear.
 
 ---
@@ -335,7 +342,7 @@ approve the consent screen, and your merged events appear.
 ### Notes & troubleshooting
 
 - **`redirect_uri_mismatch`** → the URI in Azure/Google must *exactly* match
-  `http://localhost:8585/auth/<provider>/callback` (scheme, port, path).
+  `http://localhost:3000/auth/<provider>/callback` (scheme, port, path).
 - **Google "access blocked / app not verified"** → add your account under
   *OAuth consent screen → Test users*.
 - **Events disappear after ~1 hour** → access tokens expire; the app

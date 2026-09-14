@@ -4,9 +4,12 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/Data/git_repos/calendar
-# Replace the path below with: which npm   (or: which node, then use node server.js)
-ExecStart=/usr/bin/npm start
+# Both paths below MUST be edited: %h is your home directory, so point
+# WorkingDirectory at wherever you cloned this repository.
+WorkingDirectory=%h/unified_calendar
+# Use an absolute path to node (`which node`). Prefer a version-manager shim such as
+# ~/.local/share/mise/shims/node over a version-pinned path, which breaks on upgrade.
+ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
