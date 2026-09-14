@@ -1389,26 +1389,44 @@ function updateImportantButton() {
   btn.textContent = isImportant(currentModalEvent.id) ? '☆ Unmark important' : '★ Mark important';
 }
 
-// Flips the current modal event's important flag, persists it through the same
-// PUT /api/settings the Settings page uses, and refetches (cache-only — no
-// network round trip, since the range is already cached) so .evt-important
-// picks up immediately on both calendar instances.
+// Flips the current modal event's important flag and refetches (cache-only — no
+// network round trip, since the range is already cached) so .evt-important picks
+// up immediately on both calendar instances.
+// Saved one id at a time through POST /api/settings/important, never as a whole
+// array: this page's list is a page-load snapshot, and saving all of it would
+// wipe out every star made in the bar widget meanwhile. The server answers with
+// the authoritative list, which is how those widget stars reach this page.
 async function toggleImportant() {
   if (!currentModalEvent) return;
   const id = currentModalEvent.id;
   const list = Array.isArray(settings.importantEvents) ? settings.importantEvents.slice() : [];
   const idx = list.indexOf(id);
+  const important = idx < 0;
   if (idx >= 0) list.splice(idx, 1); else list.push(id);
   settings.importantEvents = list;
   updateImportantButton();
   calendar?.refetchEvents();
   dayCal?.refetchEvents();
   try {
-    await fetch('/api/settings', {
-      method: 'PUT',
+    const res = await fetch('/api/settings/important', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ importantEvents: list }),
+      body: JSON.stringify({ id, important }),
     });
+    if (!res.ok) return;
+    const saved = await res.json();
+    if (!Array.isArray(saved.importantEvents)) return;
+    const known = new Set(list);
+    const changed =
+      saved.importantEvents.length !== list.length ||
+      saved.importantEvents.some((x) => !known.has(x));
+    settings.importantEvents = saved.importantEvents;
+    // Only re-render when the server knew something this page did not.
+    if (changed) {
+      updateImportantButton();
+      calendar?.refetchEvents();
+      dayCal?.refetchEvents();
+    }
   } catch { /* local state already updated; next load will reconcile */ }
 }
 

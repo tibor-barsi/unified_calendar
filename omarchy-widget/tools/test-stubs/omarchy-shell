@@ -1,0 +1,119 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-shell %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+
+target="${1:-}"
+method="${2:-}"
+
+# Space-separated exit codes, one per call; the last one repeats
+next_code() {
+  local sequence="$1" counter_file="$2" count=1
+  local -a codes
+  read -r -a codes <<<"$sequence"
+  if [[ -n "$counter_file" ]]; then
+    [[ -f "$counter_file" ]] && count=$(( $(<"$counter_file") + 1 ))
+    printf '%s' "$count" > "$counter_file"
+  fi
+  (( count > ${#codes[@]} )) && count=${#codes[@]}
+  printf '%s' "${codes[count - 1]}"
+}
+
+# Whether anyone holds the Omarchy update lock, and how many of this process's fds point at it
+probe_update_lock() {
+  local lock="${XDG_RUNTIME_DIR:-/tmp}/omarchy-update.lock" link held=held fds=0
+  for link in /proc/$$/fd/*; do
+    if [[ "$(readlink -- "$link" 2>/dev/null || true)" == */omarchy-update.lock ]]; then
+      fds=$((fds + 1))
+    fi
+  done
+  if flock -n "$lock" true 2>/dev/null; then
+    held=free
+  fi
+  printf 'lock=%s fds=%s env=%s\n' "$held" "$fds" "${OMARCHY_UPDATE_LOCK_FD-<unset>}"
+}
+
+case "$target:$method" in
+  shell:rescanPlugins)
+    exit "${STUB_RESCAN_EXIT:-0}"
+    ;;
+  shell:ping)
+    if [[ -n "${STUB_UPDATE_LOCK_PROBE_LOG:-}" ]]; then
+      probe_update_lock >> "$STUB_UPDATE_LOCK_PROBE_LOG"
+    fi
+    if [[ -n "${STUB_PING_SEQUENCE:-}" ]]; then
+      exit "$(next_code "$STUB_PING_SEQUENCE" "${STUB_PING_COUNTER_FILE:-}")"
+    fi
+    exit "${STUB_PING_EXIT:-0}"
+    ;;
+  shell:listPlugins)
+    # The plugin state file holds true, false or missing (the shell dropped the widget's manifest)
+    if [[ -n "${STUB_PLUGIN_STATE_FILE:-}" && -f "$STUB_PLUGIN_STATE_FILE" ]]; then
+      stock=false
+      if [[ -n "${STUB_STOCK_CLOCK_STATE_FILE:-}" && -f "$STUB_STOCK_CLOCK_STATE_FILE" ]]; then
+        stock="$(<"$STUB_STOCK_CLOCK_STATE_FILE")"
+      fi
+      widget="$(<"$STUB_PLUGIN_STATE_FILE")"
+      if [[ "$widget" == missing ]]; then
+        printf '[{"id":"omarchy.clock","enabled":%s}]\n' "$stock"
+      else
+        printf '[{"id":"unified.clock","enabled":%s},{"id":"omarchy.clock","enabled":%s}]\n' "$widget" "$stock"
+      fi
+      exit 0
+    fi
+    list_counter_file="${STUB_LISTPLUGINS_COUNTER_FILE:-}"
+    list_count=1
+    if [[ -n "$list_counter_file" ]]; then
+      list_count=0
+      [[ -f "$list_counter_file" ]] && list_count=$(<"$list_counter_file")
+      list_count=$((list_count + 1))
+      printf '%s' "$list_count" > "$list_counter_file"
+    fi
+    if (( list_count <= ${STUB_LISTPLUGINS_UNKNOWN_CALLS:-0} )); then
+      printf '[]\n'
+    else
+      printf '%s\n' "${STUB_LISTPLUGINS_JSON:-[]}"
+    fi
+    exit 0
+    ;;
+  omarchy.clock:calendarHealth)
+    # Both clocks declare the omarchy.clock IPC target; a stock clock in the bar takes the call and has no calendarHealth
+    if [[ -n "${STUB_STOCK_CLOCK_STATE_FILE:-}" && -f "$STUB_STOCK_CLOCK_STATE_FILE" && "$(<"$STUB_STOCK_CLOCK_STATE_FILE")" == true ]]; then
+      echo '{"ok":false}'
+      exit 0
+    fi
+    if [[ -n "${STUB_HEALTH_JSON+x}" ]]; then
+      printf '%s\n' "$STUB_HEALTH_JSON"
+      exit "${STUB_HEALTH_EXIT:-0}"
+    fi
+    counter_file="${STUB_HEALTH_COUNTER_FILE:-}"
+    count=0
+    if [[ -n "$counter_file" ]]; then
+      [[ -f "$counter_file" ]] && count=$(<"$counter_file")
+      count=$((count + 1))
+      printf '%s' "$count" > "$counter_file"
+    else
+      count=1
+    fi
+    if [[ -n "${STUB_HEALTH_FAIL_AFTER:-}" ]] && (( count > STUB_HEALTH_FAIL_AFTER )); then
+      echo '{"ok":false}'
+      exit 0
+    fi
+    ok_after="${STUB_HEALTH_OK_AFTER:-0}"
+    stale_calls="${STUB_HEALTH_STALE_CALLS:-}"
+    if (( count <= ok_after )); then
+      echo '{"ok":false}'
+    elif [[ -z "$stale_calls" ]]; then
+      echo '{"ok":true}'
+    elif (( count <= stale_calls )); then
+      echo '{"ok":true,"loadedAt":1}'
+    else
+      echo "{\"ok\":true,\"loadedAt\":$(date +%s%3N)}"
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac

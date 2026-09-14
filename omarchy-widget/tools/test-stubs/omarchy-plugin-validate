@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'omarchy-plugin-validate %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+exit "${STUB_VALIDATE_EXIT:-0}"

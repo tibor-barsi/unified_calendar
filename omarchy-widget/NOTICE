@@ -1,0 +1,22 @@
+Third-party code in this directory
+==================================
+
+`plugin/BarWidget.qml`, `plugin/Panel.qml` and `plugin/Model.js` are derived from
+Omarchy's own bar clock, and `upstream/` holds an unmodified copy of the same four
+files kept solely so an Omarchy update can be diffed against the version this
+widget was built on.
+
+    Project:  Omarchy — https://github.com/basecamp/omarchy
+    Files:    shell/plugins/panels/clock/{BarWidget.qml,Panel.qml,Model.js,manifest.json}
+    Version:  omarchy 4.0.3-1 (see upstream/VERSION)
+    Licence:  MIT
+
+The Arch package declares `Licenses: MIT` in its metadata but ships no LICENCE
+file, so none is reproduced here; the canonical text is in the upstream repository.
+
+`upstream/Model.js` and `plugin/Model.js` are byte-identical to the installed
+originals. `BarWidget.qml` and `Panel.qml` carry our additions on top — see
+UPDATING.md for exactly which parts are ours and which are Omarchy's.
+
+Everything else under `plugin/`, `tools/`, `test/` and `test-qml/` is original to
+this project.

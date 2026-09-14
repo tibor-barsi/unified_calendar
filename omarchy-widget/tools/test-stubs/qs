@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${STUB_CALLS_LOG:-}" ]]; then
+  printf 'qs %s\n' "$*" >> "$STUB_CALLS_LOG"
+fi
+
+if [[ "${1:-}" != "log" ]]; then
+  exit 0
+fi
+
+marker="${STUB_RESTART_MARKER:-}"
+if [[ -n "$marker" && -f "$marker" ]]; then
+  file="${STUB_QS_LOG_AFTER:-}"
+else
+  file="${STUB_QS_LOG_BEFORE:-}"
+fi
+
+if [[ -n "$file" && -f "$file" ]]; then
+  cat "$file"
+fi
+exit 0

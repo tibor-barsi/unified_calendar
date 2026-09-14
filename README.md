@@ -19,8 +19,13 @@ Two ways to add a calendar — use either or both:
 A **⚙ Settings** page (top-right) manages everything in one place:
 accounts (connect/disconnect Outlook & Google), ICS subscriptions (add/remove),
 and calendar preferences — week start day, default view, 12/24-hour time, and
-weekend visibility. Feeds and preferences persist to `data/` across restarts;
-events are still fetched live (never stored).
+weekend visibility. Feeds, preferences and the OAuth tokens persist to `data/`
+across restarts; events are fetched live on every request and their bodies are
+not written to disk by the server. Two things do reach disk: the ids of the
+events you star (kept in `data/settings.json`), and — when the widget's offline
+cache is switched on — a reduced copy of each event. The desktop widget keeps a
+fuller cache of its own; both are described under [Widget API](#widget-api)
+below.
 
 The **Calendars** sidebar lets you, per calendar:
 
@@ -97,27 +102,119 @@ Leave `AUTH_PASSWORD` unset (or remove it) to disable authentication entirely.
 
 ---
 
+## Reaching it from another machine
+
+The app binds to **`127.0.0.1`** — this machine only. That is deliberate: with no
+`AUTH_PASSWORD` set there is no login at all, and `data/settings.json` holds OAuth
+refresh tokens and, for CalDAV, a password in plaintext. Listening on every
+interface would hand a personal calendar to anyone who can reach the port.
+
+`HOST=0.0.0.0` opens it up. Only do that together with `AUTH_PASSWORD`, and
+preferably not on its own — the app speaks plain HTTP, so a password travels in
+clear text across the network. Either of these is better:
+
+- **A VPN — the simplest.** Leave `HOST` at `127.0.0.1` on the server and reach it
+  over Tailscale/WireGuard, or through an SSH tunnel:
+  `ssh -L 3000:127.0.0.1:3000 you@server`. Nothing is exposed publicly at all.
+- **A TLS reverse proxy.** Caddy or nginx terminates HTTPS and forwards to
+  `127.0.0.1:3000`; set `AUTH_PASSWORD` and `BASE_URL=https://...` so the session
+  cookie is marked `Secure`.
+
+Note that the Omarchy bar widget cannot authenticate: it fetches with plain `curl`
+and sends no cookie, so it gets 401 on every poll against an install that sets
+`AUTH_PASSWORD`. Run the widget against a loopback instance, not a protected one.
+
+Starting with a non-loopback `HOST` and no `AUTH_PASSWORD` prints a warning on
+boot; it does not stop the server.
+
+---
+
+## Widget API
+
+Two JSON endpoints serve the desktop widget (`omarchy-widget/`). Both send
+`Cache-Control: no-store`, never touch the session cookie, and — when
+`AUTH_PASSWORD` is set — require the same `cal_auth` cookie as the web app
+(otherwise `401`).
+
+**`GET /api/widget/events?start=YYYY-MM-DD&end=YYYY-MM-DD`**
+
+- `start` and `end` are plain calendar dates in the server's local timezone.
+- `end` is **exclusive**: a single day is `start=2026-09-15&end=2026-09-16`.
+- The range must be at least 1 and at most **100 days** (`400` otherwise).
+- Returns `{ generatedAt, range, calendars, events, errors, stale, syncedAt }`.
+  Each event is `{ id, title, start, end, allDay, calId, calendar, color,
+  location, notes, meetingUrl, url, important }`.
+- `stale` lists `{ provider, syncedAt }` for each provider that failed this
+  round and was served from the cache instead; `syncedAt` is the oldest of
+  those timestamps (or `generatedAt` when nothing is stale). With the cache off
+  (the default) `stale` is always empty.
+- `502` when the fetch fails and there is nothing cached to fall back on.
+
+**`POST /api/widget/important`** — body `{ "id": "<event id>", "important":
+true|false }` (JSON, max 2 KB). Stars/unstars one event, stored in
+`data/settings.json`. Responds with the same `{ id, important }` pair.
+
+### `UNIFIED_CALENDAR_WIDGET_CACHE` — offline event cache (off by default)
+
+Set `UNIFIED_CALENDAR_WIDGET_CACHE=1` (or `true`) to let the widget keep
+serving events while a provider is unreachable. It is the only event data the
+**server** writes to disk, so it is opt-in:
+
+- On: each queried range is written to `data/widget-cache.json` (mode `0600`),
+  and a provider that fails is served from it and reported in `stale`.
+- Only the fields a cached render needs are stored: `id`, `title`, `start`,
+  `end`, `allDay`, `calId`, `color`, `source`. Descriptions, locations, meeting
+  links, original URLs and CalDAV identifiers are **never** written.
+- The file is bounded: at most 24 ranges and 1 MB, least-recently-used ranges
+  dropped first.
+- Off (unset, `0`, `false`): nothing is written, and the widget works exactly as
+  before online — only the offline `stale` / `syncedAt` fallback is lost.
+
+Both the cache and the rest of the persisted state live in `data/`, or in
+`UNIFIED_CALENDAR_DATA_DIR` when that is set. Delete `data/widget-cache.json` at
+any time; it is rebuilt on demand. A file left behind by an older build holds
+full event bodies — restart the server first (`systemctl --user restart
+calendar`) so the reducing code is live, then delete it, or a server still
+running the old code rewrites it on the next widget poll.
+
+This flag does **not** reach the desktop widget's own cache. Whatever the flag
+is set to, the widget writes every range it fetched to
+`~/.cache/unified-calendar-widget.json` exactly as the API returned it — full
+event bodies, `notes` (descriptions), `location` and `meetingUrl` included — so
+its panel can still render while the server is down. That copy is
+unconditional: there is no setting that turns it off. Delete the file to clear
+it (the widget rewrites it on the next poll).
+
+---
+
 ## Running as a daily-driver service
 
-The app is meant to run permanently in the background on port **8585** and be
+The app is meant to run permanently in the background on port **3000** and be
 managed with `systemctl`.
 
 ### Install the service (one-time)
 
+`calendar.service` is a template: it cannot know where you cloned this or where
+your `node` lives, so edit `WorkingDirectory` and `ExecStart` before copying it.
+
 ```bash
 cp calendar.service ~/.config/systemd/user/
+$EDITOR ~/.config/systemd/user/calendar.service   # set WorkingDirectory + ExecStart
 systemctl --user daemon-reload
 systemctl --user enable --now calendar
-systemctl --user restart calendar
 ```
 
 The service auto-starts on login and restarts if it crashes.
+
+> **On Omarchy?** `omarchy-widget/install.sh` does all of the above — writing the
+> unit with the right paths, picking the port, starting the service — and then
+> installs the bar widget. See [`omarchy-widget/README.md`](omarchy-widget/README.md).
 
 ### Day-to-day commands
 
 | What            | Command                                   |
 |-----------------|-------------------------------------------|
-| Open in browser | <http://localhost:8585>                   |
+| Open in browser | <http://localhost:3000>                   |
 | Start           | `systemctl --user start calendar`         |
 | Stop            | `systemctl --user stop calendar`          |
 | Restart         | `systemctl --user restart calendar`       |
@@ -133,7 +230,7 @@ cp calendar.desktop ~/.local/share/applications/
 update-desktop-database ~/.local/share/applications/
 ```
 
-Clicking it opens `http://localhost:8585` in your default browser (the service
+Clicking it opens `http://localhost:3000` in your default browser (the service
 must already be running).
 
 ---
@@ -142,7 +239,7 @@ must already be running).
 
 Want events showing in under a minute, without registering any app? Use this.
 
-1. Start the service (see above), then open <http://localhost:8585>.
+1. Start the service (see above), then open <http://localhost:3000>.
 2. Expand **"➕ Subscribe to a calendar by ICS link"**, paste a published
    `.ics` URL, give it a label, click **Add**. Both `https://` and `webcal://`
    links work.
@@ -167,7 +264,7 @@ richer/live access but need one-time setup.
    (this matches `MICROSOFT_TENANT=common`). Pick *single tenant* only if it's
    solely for your org — then set `MICROSOFT_TENANT` to your tenant ID.
 4. **Redirect URI:** platform **Web**, value:
-   `http://localhost:8585/auth/microsoft/callback`
+   `http://localhost:3000/auth/microsoft/callback`
 5. Click **Register**.
 6. Copy the **Application (client) ID** → this is `MICROSOFT_CLIENT_ID`.
 7. Left menu → **Certificates & secrets** → **New client secret** → copy the
@@ -193,7 +290,7 @@ richer/live access but need one-time setup.
    **OAuth client ID**:
    - **Application type:** Web application.
    - **Authorised redirect URIs:** add
-     `http://localhost:8585/auth/google/callback`
+     `http://localhost:3000/auth/google/callback`
    - **Create**.
 5. Copy the **Client ID** → `GOOGLE_CLIENT_ID` and the
    **Client secret** → `GOOGLE_CLIENT_SECRET`.
@@ -209,8 +306,8 @@ cp .env.example .env
 Open `.env` and fill in:
 
 ```ini
-PORT=8585
-BASE_URL=http://localhost:8585
+PORT=3000
+BASE_URL=http://localhost:3000
 SESSION_SECRET=<any long random string>
 
 MICROSOFT_CLIENT_ID=...        # from Azure step 6
@@ -222,6 +319,9 @@ GOOGLE_CLIENT_SECRET=...       # from Google step 5
 
 # Optional — protect the app with a password when hosting on a server:
 # AUTH_PASSWORD=your-secret-password
+
+# Optional — let the widget cache events on disk for offline use (off by default):
+# UNIFIED_CALENDAR_WIDGET_CACHE=1
 ```
 
 > The code reads these in `src/config.js`. You never edit source for
@@ -234,7 +334,7 @@ npm install
 npm start          # or: npm run dev   (auto-restart on file changes)
 ```
 
-Open <http://localhost:8585>. Click **Connect** next to Outlook and/or Google,
+Open <http://localhost:3000>. Click **Connect** next to Outlook and/or Google,
 approve the consent screen, and your merged events appear.
 
 ---
@@ -242,7 +342,7 @@ approve the consent screen, and your merged events appear.
 ### Notes & troubleshooting
 
 - **`redirect_uri_mismatch`** → the URI in Azure/Google must *exactly* match
-  `http://localhost:8585/auth/<provider>/callback` (scheme, port, path).
+  `http://localhost:3000/auth/<provider>/callback` (scheme, port, path).
 - **Google "access blocked / app not verified"** → add your account under
   *OAuth consent screen → Test users*.
 - **Events disappear after ~1 hour** → access tokens expire; the app
