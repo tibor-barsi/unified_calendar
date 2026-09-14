@@ -20,29 +20,62 @@ last saw, so the panel still shows events when the server is down — with a
 - Omarchy 4 (Arch + Hyprland + Quickshell). The widget replaces the stock clock,
   so it is specific to this desktop and useless elsewhere.
 - The unified_calendar server running locally — normally as a systemd **user**
-  service on port 3000.
+  service on port 3000. `install.sh` sets that up for you.
+- Node, for the server. A `mise` shim is preferred: the unit then keeps working
+  across Node upgrades, where a version-pinned path would break.
 - `jq` and `curl` (both are already Omarchy dependencies).
 
 ## Install
 
-    tools/deploy.sh
+On a fresh Omarchy machine, from a clone of this repository:
 
-Copies `plugin/` to `~/.config/omarchy/plugins/unified.clock/`, **restarts the
-shell**, waits for the widget to answer, and scans the shell log for load
-failures. The previous copy is kept as `.unified.clock.prev`; `tools/deploy.sh
---rollback` puts it back.
+    omarchy-widget/install.sh
 
-Then add `unified.clock` to the bar in Omarchy's settings and remove
-`omarchy.clock` — both register the same IPC target, so running them together
-makes health checks ambiguous. If `bar.centerAnchor` in `~/.config/omarchy/shell.json`
-names `omarchy.clock`, `deploy.sh` repoints it at `unified.clock`; otherwise the
-clock drifts sideways whenever the hover-reveal icons appear.
+That is the whole thing. It checks the machine, installs the Node dependencies,
+writes and starts a `calendar.service` systemd **user** unit pointed at this
+checkout, waits for the widget API to answer, reconciles the clock baseline,
+deploys the plugin, points the widget at the server, installs the update hooks,
+and offers the `SUPER + SHIFT + C` keybinding. Every step is re-runnable: run it
+again after pulling and it repairs rather than duplicates.
 
-Optional, and recommended if you let Omarchy update itself:
+    install.sh --port 8585      serve on a different port
+    install.sh --yes            no prompts, for a scripted rollout
+    install.sh --offline-cache  let the server keep a reduced event cache on disk
+    install.sh --no-keybind     leave the Hyprland bindings alone
+    install.sh --uninstall      put the machine back (your calendars are kept)
 
-    tools/install-hooks.sh
+It never needs root, and writes only inside `$HOME` and this checkout. Anything
+it replaces — the unit, `shell.json`, `bindings.lua` — is copied to a timestamped
+`.bak-<date>` first.
 
-See "Surviving Omarchy updates" below.
+### If your Omarchy is newer than the baseline
+
+`upstream/` records the Omarchy clock this widget was last reconciled with.
+On a machine running a different 4.x, the update check would otherwise read the
+difference as "Omarchy changed its clock" on the first boot and pause a widget
+that is fine. `install.sh` offers to adopt the local clock as the baseline, and
+only concludes the widget is healthy after it has actually loaded and answered a
+health probe. Adoption is recorded in tracked files, so `git diff
+omarchy-widget/upstream/` always shows which Omarchy you are pinned to.
+
+Adopting does **not** merge Omarchy's clock changes into the widget — the panel
+is still built from the code it was written against. For a real reconciliation
+see `UPDATING.md`; to adopt or check by hand:
+
+    tools/rebaseline.sh --check     does the installed clock match the baseline?
+    tools/rebaseline.sh             adopt it, after showing what differs
+
+### Doing it by hand
+
+    tools/deploy.sh          copy plugin/ into place and restart the shell
+    tools/install-hooks.sh   register the post-update / post-boot checks
+
+`deploy.sh` keeps the previous copy as `.unified.clock.prev`; `--rollback` puts
+it back. Add `unified.clock` to the bar and remove `omarchy.clock` — both
+register the same IPC target, so running them together makes health checks
+ambiguous. If `bar.centerAnchor` in `~/.config/omarchy/shell.json` names
+`omarchy.clock`, `deploy.sh` repoints it at `unified.clock`; otherwise the clock
+drifts sideways whenever the hover-reveal icons appear.
 
 ## Settings
 
@@ -121,12 +154,13 @@ grid matches Omarchy's own, so it needs Omarchy present.
 
 ## Uninstall
 
-    omarchy-plugin-disable unified.clock
-    rm -rf ~/.config/omarchy/plugins/unified.clock ~/.config/omarchy/plugins/.unified.clock.prev
+    omarchy-widget/install.sh --uninstall
 
-Put `omarchy.clock` back in the bar, and set `bar.centerAnchor` back to
-`omarchy.clock`. Remove the hooks with
-`rm -f ~/.config/omarchy/hooks/post-{update,boot}.d/unified-calendar-widget`.
+Removes the hooks, rolls the bar back to Omarchy's own clock (restoring
+`bar.centerAnchor` with it), drops the keybinding it added, and stops and removes
+the service. Your calendars and settings in `data/` are kept, as is the widget's
+own cache in `~/.cache/unified-calendar-widget/` — delete that yourself if you
+want it gone.
 
 ## Provenance
 
