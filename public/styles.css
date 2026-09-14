@@ -386,6 +386,11 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   display: flex;
   flex-direction: column;
   gap: 18px;
+  /* main sets overflow:hidden for the calendar view; the settings page is a
+     long document and needs its own scroller. min-height:0 lets this flex
+     item shrink below its content height so the scroller actually engages. */
+  overflow-y: auto;
+  min-height: 0;
 }
 .card {
   background: var(--card);
