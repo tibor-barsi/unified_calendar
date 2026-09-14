@@ -2,11 +2,17 @@ process.env.TZ = 'Europe/Ljubljana';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadQmlScript } from '../test-support/load-qml-script.js';
 
 const modelPath = fileURLToPath(new URL('../plugin/CalendarModel.js', import.meta.url));
 const OMARCHY_MODEL_PATH = '/usr/share/omarchy/shell/plugins/panels/clock/Model.js';
+// Cross-checking against Omarchy's own Model.js needs Omarchy installed. Skip
+// elsewhere (CI, a non-Omarchy dev box) instead of failing the whole suite.
+const NO_OMARCHY = existsSync(OMARCHY_MODEL_PATH)
+  ? false
+  : `Omarchy not installed (${OMARCHY_MODEL_PATH} missing)`;
 
 function load() {
   return loadQmlScript(modelPath);
@@ -178,7 +184,7 @@ test('eventDayKeys: invalid inputs return an empty array', () => {
 
 // ---- gridRange cross-check against Omarchy's own Model.js -----------------
 
-test('gridRange matches Omarchy Model.monthGrid exactly for every month of 2026-2027, both week starts', () => {
+test('gridRange matches Omarchy Model.monthGrid exactly for every month of 2026-2027, both week starts', { skip: NO_OMARCHY }, () => {
   const m = load();
   const omarchy = loadQmlScript(OMARCHY_MODEL_PATH);
 

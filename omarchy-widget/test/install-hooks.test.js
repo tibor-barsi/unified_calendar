@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test as nodeTest } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
@@ -20,6 +20,15 @@ const SYSTEM_PATH = '/usr/local/bin:/usr/bin:/bin';
 const EVENTS = ['post-update', 'post-boot'];
 const NAME = 'unified-calendar-widget';
 const LOCK_CLOSE = 'exec {OMARCHY_UPDATE_LOCK_FD}>&-';
+
+// These exercise install-hooks.sh against Omarchy's real hook binaries rather than
+// stubs, which is the point of them — the wrapper has to survive the actual update
+// lock. Off an Omarchy machine there is nothing to test against, so skip instead of
+// failing: `npm test` stays green on CI and on a non-Omarchy dev box.
+const NO_OMARCHY = [HOOK_INSTALL, HOOK_RUN, UPDATE_LOCK].every((p) => existsSync(p))
+  ? false
+  : 'Omarchy not installed (/usr/share/omarchy/bin/omarchy-hook* missing)';
+const test = (name, fn) => nodeTest(name, { skip: NO_OMARCHY }, fn);
 
 function setup(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'unified-clock-hooks-')));
