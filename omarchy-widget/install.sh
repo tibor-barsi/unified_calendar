@@ -316,10 +316,15 @@ if [[ -f "$UNIT" ]] && ! grep -qF "$UNIT_MARKER" "$UNIT"; then
     || die "left $UNIT alone — re-run with --skip-npm once you have merged your changes, or move it aside"
 fi
 
-backup "$UNIT"
-generate_unit > "$UNIT"
-
-info "wrote $UNIT"
+if [[ -f "$UNIT" ]] && diff -q <(generate_unit) "$UNIT" >/dev/null 2>&1; then
+  # Identical: writing it again would only litter the directory with backups that
+  # differ from each other in nothing at all.
+  info "$UNIT is already up to date"
+else
+  backup "$UNIT"
+  generate_unit > "$UNIT"
+  info "wrote $UNIT"
+fi
 (( offline_cache )) && info "offline event cache: on" || info "offline event cache: off"
 
 systemctl --user daemon-reload
