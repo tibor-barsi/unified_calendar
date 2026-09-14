@@ -1,12 +1,135 @@
 :root {
+  color-scheme: light;
+
+  /* Brand / provider accents */
   --ms: #2563eb;
   --g: #16a34a;
   --cdav: #0891b2;
+
+  /* Core surface tokens (light palette) */
   --bg: #f5f6f8;
   --card: #ffffff;
   --text: #1f2933;
   --muted: #6b7280;
   --border: #e5e7eb;
+
+  /* Neutral interactive surfaces */
+  --hover: #f0f1f3;
+  --hover-strong: #eceef1;
+  --surface-soft: #fafafa;
+  --overlay: rgba(0, 0, 0, 0.4);
+
+  /* Warning / banner */
+  --warn-bg: #fef3c7;
+  --warn-border: #fcd34d;
+  --warn-text: #92400e;
+  --warn-text-hover: #78350f;
+
+  /* Danger */
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --danger-border: #fca5a5;
+
+  /* Success (soft) */
+  --success-soft-bg: #f0fdf4;
+  --g-hover: #15803d;
+
+  /* Guest RSVP badges */
+  --guest-accepted-border: #bbf7d0;
+  --guest-declined-text: #b91c1c;
+  --guest-declined-border: #fecaca;
+  --guest-tentative-text: #b45309;
+  --guest-tentative-border: #fde68a;
+
+  /* Important-event accent (distinct from provider/account colors) */
+  --important-accent: #d97706;
+  --important-ring: rgba(217, 119, 6, 0.45);
+
+  /* Today highlight */
+  --today-tint: rgba(37, 99, 235, 0.12);
+
+  /* Weekend styling (round 2) */
+  --weekend-tint-bg: rgba(100, 116, 139, 0.07);
+  --weekend-divider: rgba(100, 116, 139, 0.55);
+
+  /* FullCalendar theme mapping — these follow the app tokens above, so
+     redefining the tokens under [data-theme="dark"] re-themes the calendar
+     automatically. Only values with no natural app-token equivalent are
+     restated in the dark block below. */
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--card);
+  --fc-neutral-bg-color: var(--hover);
+  --fc-today-bg-color: var(--hover-strong);
+  --fc-event-bg-color: var(--ms);
+  --fc-event-border-color: var(--ms);
+  --fc-event-text-color: #ffffff;
+  --fc-button-bg-color: var(--card);
+  --fc-button-border-color: var(--border);
+  --fc-button-text-color: var(--text);
+  --fc-button-hover-bg-color: var(--hover);
+  --fc-button-hover-border-color: var(--border);
+  --fc-button-active-bg-color: var(--hover-strong);
+  --fc-button-active-border-color: var(--border);
+  --fc-list-event-hover-bg-color: var(--hover);
+  --fc-list-event-dot-width: 10px;
+  --fc-non-business-color: rgba(0, 0, 0, 0.03);
+  --fc-now-indicator-color: var(--ms);
+  --fc-highlight-color: rgba(37, 99, 235, 0.15);
+  --fc-small-font-size: 0.85em;
+}
+
+/* ── Dark theme ──
+   Only the tokens that actually change are redefined here; every rule in
+   this file consumes the tokens above (never raw hex), so the whole app —
+   including the FullCalendar --fc-* mapping above — re-themes from this
+   one block. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --ms: #5b9dff;
+  --g: #34d399;
+  --cdav: #22d3ee;
+
+  --bg: #14161a;
+  --card: #1e2128;
+  --text: #e5e7eb;
+  --muted: #9aa1ac;
+  --border: #33373f;
+
+  --hover: #2a2e37;
+  --hover-strong: #343943;
+  --surface-soft: #23262d;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --warn-bg: #3a2f12;
+  --warn-border: #7c5e15;
+  --warn-text: #fbbf24;
+  --warn-text-hover: #fcd34d;
+
+  --danger: #f87171;
+  --danger-bg: #3f1d1d;
+  --danger-border: #7f2b2b;
+
+  --success-soft-bg: #113322;
+  --g-hover: #22c55e;
+
+  --guest-accepted-border: #14532d;
+  --guest-declined-text: #f87171;
+  --guest-declined-border: #7f2b2b;
+  --guest-tentative-text: #fbbf24;
+  --guest-tentative-border: #7c5e15;
+
+  --important-accent: #fbbf24;
+  --important-ring: rgba(251, 191, 36, 0.5);
+
+  --today-tint: rgba(91, 157, 255, 0.22);
+
+  --weekend-tint-bg: rgba(148, 163, 184, 0.10);
+  --weekend-divider: rgba(148, 163, 184, 0.55);
+
+  /* FC values with no direct app-token equivalent */
+  --fc-non-business-color: rgba(255, 255, 255, 0.04);
+  --fc-highlight-color: rgba(91, 157, 255, 0.25);
 }
 
 * { box-sizing: border-box; }
@@ -50,7 +173,7 @@ body {
   background: var(--card);
   cursor: pointer;
 }
-.jump-to select:hover { background: #f0f1f3; }
+.jump-to select:hover { background: var(--hover); }
 
 .last-synced { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
 .settings-link {
@@ -61,7 +184,7 @@ body {
   padding: 6px 12px;
   font-size: 0.88rem;
 }
-.settings-link:hover { background: #f0f1f3; }
+.settings-link:hover { background: var(--hover); }
 
 .logout-btn {
   border: 1px solid var(--border);
@@ -71,7 +194,7 @@ body {
   background: var(--card);
   color: var(--muted);
 }
-.logout-btn:hover { background: #f0f1f3; color: var(--text); }
+.logout-btn:hover { background: var(--hover); color: var(--text); }
 
 .sync-btn {
   display: inline-flex;
@@ -83,7 +206,7 @@ body {
   font-size: 0.88rem;
   background: var(--card);
 }
-.sync-btn:hover { background: #f0f1f3; }
+.sync-btn:hover { background: var(--hover); }
 .sync-icon { display: inline-block; font-size: 1rem; line-height: 1; }
 .sync-btn.spinning .sync-icon { animation: spin 0.6s linear infinite; }
 @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
@@ -93,7 +216,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #f0f1f3;
+  background: var(--hover);
   border-radius: 14px;
   padding: 4px 11px;
   font-size: 0.82rem;
@@ -131,7 +254,7 @@ button {
   cursor: pointer;
   font-size: 0.85rem;
 }
-button:hover { background: #f0f1f3; }
+button:hover { background: var(--hover); }
 button.connect { border-color: var(--ms); color: var(--ms); }
 [data-provider="google"] button.connect { border-color: var(--g); color: var(--g); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -142,30 +265,68 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   margin: 12px 24px 0;
   padding: 10px 14px;
   border-radius: 8px;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
-  color: #92400e;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  color: var(--warn-text);
   font-size: 0.9rem;
 }
 .banner-link {
-  color: #92400e;
+  color: var(--warn-text);
   font-weight: 600;
   text-decoration: underline;
   white-space: nowrap;
 }
-.banner-link:hover { color: #78350f; }
+.banner-link:hover { color: var(--warn-text-hover); }
 
 main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%; display: flex; flex-direction: column; }
 
 /* ── Layout: calendars sidebar + calendar ── */
-.layout { display: flex; align-items: flex-start; flex: 1; min-height: 0; overflow: hidden; }
+/* align-items: stretch (the default, stated explicitly here) so .sidebar
+   takes the full height of .layout instead of shrink-wrapping its content
+   — required now that the relocated topbar controls (round 2, 4e) make
+   the sidebar taller than the calendar in narrow windows. Combined with
+   the sidebar's own overflow-y:auto below, this keeps the sidebar's own
+   content scrollable internally instead of overflowing the page. */
+.layout { display: flex; align-items: stretch; flex: 1; min-height: 0; overflow: hidden; }
 
 .sidebar {
   width: 230px;
   flex: 0 0 230px;
   padding: 20px 0 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Same bugfix as .settings (round 1): min-height:0 lets this flex item
+     shrink below its content height so overflow-y:auto actually engages,
+     instead of pushing the page taller than the viewport. */
+  overflow-y: auto;
+  min-height: 0;
+  transition: width 0.2s ease, flex-basis 0.2s ease, padding 0.2s ease;
 }
-.sidebar h2 { font-size: 0.95rem; margin: 0 0 12px; }
+.sidebar h2 { font-size: 0.95rem; margin: 0; }
+
+/* ── Relocated topbar controls (round 2, 4e) ──
+   #sidebar-toggle, #status, .jump-to (#jump-month/#jump-year), #last-synced,
+   #sync-btn, .settings-link and #logout-btn move from the removed .topbar
+   into .sidebar. They keep their original classes/ids (and .topbar's own
+   rules, still used by settings.html) — these descendant selectors just
+   restyle them for a vertical panel instead of a horizontal bar. Selectors
+   are descendant-scoped (not direct-child) so they hold regardless of any
+   wrapper the markup places them in. */
+.sidebar #sidebar-toggle { align-self: flex-start; flex: 0 0 auto; }
+.sidebar #status { flex-wrap: wrap; gap: 6px; }
+.sidebar .jump-to { width: 100%; gap: 6px; }
+.sidebar .jump-to select { flex: 1 1 0; min-width: 0; }
+.sidebar #last-synced { display: block; white-space: normal; }
+.sidebar #sync-btn,
+.sidebar .settings-link,
+.sidebar #logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
 
 .cal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .cal-item {
@@ -175,7 +336,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   padding: 5px 8px;
   border-radius: 7px;
 }
-.cal-item:hover { background: #eceef1; }
+.cal-item:hover { background: var(--hover-strong); }
 .cal-name { font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .cal-open-btn {
   border: 1px solid var(--border);
@@ -188,7 +349,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   line-height: 1.4;
   cursor: pointer;
 }
-.cal-open-btn:hover { background: #eceef1; color: var(--text); }
+.cal-open-btn:hover { background: var(--hover-strong); color: var(--text); }
 .cal-toggle { width: 16px; height: 16px; cursor: pointer; }
 .cal-color {
   width: 22px;
@@ -214,11 +375,18 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   color: var(--text);
   cursor: pointer;
 }
-.provider-link-btn:hover { background: #eceef1; }
+.provider-link-btn:hover { background: var(--hover-strong); }
 
-/* ── Sidebar toggle (hamburger) — desktop: hidden ── */
+/* ── Sidebar toggle (hamburger) ──
+   Round 1: mobile-only off-canvas opener (desktop: hidden).
+   Round 2: also the desktop expanded⇄rail switch (4e), so it must stay
+   visible everywhere now — see .sidebar.is-rail below. */
 .sidebar-toggle {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
   border: none;
   background: transparent;
   font-size: 1.3rem;
@@ -228,7 +396,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   color: var(--text);
   line-height: 1;
 }
-.sidebar-toggle:hover { background: #f0f1f3; }
+.sidebar-toggle:hover { background: var(--hover); }
 
 /* Close button inside the drawer — desktop: hidden */
 .sidebar-close {
@@ -244,17 +412,124 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   border-radius: 6px;
   cursor: pointer;
 }
-.sidebar-close:hover { background: #f0f1f3; color: var(--text); }
+.sidebar-close:hover { background: var(--hover); color: var(--text); }
 
 /* Backdrop overlay — hidden by default */
 .sidebar-backdrop {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay);
   z-index: 150;
 }
 .sidebar-backdrop.visible { display: block; }
+
+/* ── Sidebar icon rail (round 2, 4e) — desktop only ──
+   .sidebar.is-rail collapses the expanded sidebar to a narrow strip.
+   Scoped to min-width:769px (the mobile breakpoint's complement) so it
+   never fights the off-canvas drawer rules below: on mobile the sidebar
+   is governed entirely by .sidebar.open/transform, and .is-rail (if the
+   class is ever present there too) has no effect — the rail is a
+   desktop-only concept per the contract ("always visible on desktop").
+   Widths transition so the calendar grid resizes smoothly instead of
+   snapping between states. */
+@media (min-width: 769px) {
+  .sidebar.is-rail {
+    width: 60px;
+    flex: 0 0 60px;
+    padding: 16px 6px;
+    align-items: center;
+  }
+
+  /* Text labels collapse to icons. Reuse the icon/label split that
+     already exists in the markup (.sync-icon+.sync-label,
+     "⚙"+.settings-label) rather than hiding whole controls, so the
+     buttons stay usable single-purpose icon buttons with their native
+     `title` attribute doing double duty as the tooltip. */
+  .sidebar.is-rail h2,
+  .sidebar.is-rail .jump-to,
+  .sidebar.is-rail #status,
+  .sidebar.is-rail #last-synced,
+  .sidebar.is-rail .sync-label,
+  .sidebar.is-rail .settings-label,
+  .sidebar.is-rail .provider-links,
+  .sidebar.is-rail .cal-name,
+  .sidebar.is-rail .cal-open-btn {
+    display: none;
+  }
+
+  /* Icon-only controls: square, centered, ≥32px hit target. */
+  .sidebar.is-rail #sidebar-toggle,
+  .sidebar.is-rail #sync-btn,
+  .sidebar.is-rail .settings-link,
+  .sidebar.is-rail #logout-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    gap: 0;
+    align-self: center;
+  }
+
+  /* "+ New event" has no separate icon/label markup to split, so its
+     text is hidden via font-size and a generated "+" glyph stands in —
+     same end result (icon-only, ≥32px target) without needing new
+     markup. */
+  .sidebar.is-rail .new-event-btn {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    font-size: 0;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sidebar.is-rail .new-event-btn::before {
+    content: '+';
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  /* Calendar list collapses to colour swatches that stay clickable
+     toggles. .cal-color (the per-calendar colour <input type="color">)
+     already renders as a coloured swatch — it's made the sole visible,
+     hit-testable surface of the row, while the actual .cal-toggle
+     checkbox (still the real show/hide control app.js listens on) is
+     stretched invisibly over the same area via CSS Grid so a click
+     anywhere on the swatch toggles it. No JS changes needed. */
+  .sidebar.is-rail .cal-item {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    justify-items: center;
+    align-items: center;
+    padding: 6px 4px;
+    gap: 0;
+  }
+  .sidebar.is-rail .cal-toggle,
+  .sidebar.is-rail .cal-color {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .sidebar.is-rail .cal-color {
+    width: 24px;
+    height: 24px;
+    pointer-events: none;
+  }
+  .sidebar.is-rail .cal-toggle {
+    width: 100%;
+    height: 100%;
+    min-height: 36px;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .sidebar.is-rail .cal-toggle:not(:checked) ~ .cal-color {
+    opacity: 0.35;
+  }
+}
 
 /* ── Mobile layout ── */
 @media (max-width: 768px) {
@@ -274,31 +549,129 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   .sync-label { display: none; }
   .settings-label { display: none; }
   .settings-link { padding: 6px 10px; }
-  .sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
 
-  /* Sidebar: fixed off-canvas drawer */
+  /* Sidebar: an always-visible narrow rail by default; .sidebar.open
+     expands it to the full off-canvas drawer. The sidebar must never be
+     fully hidden — #sidebar-toggle lives inside it (moved there when
+     .topbar was removed), so if the default state translated it fully
+     off-screen there would be nothing left on screen able to reopen it.
+     Only the resting/closed state changed here: .sidebar.open reproduces
+     the exact 280px drawer (same width, padding, shadow, backdrop) this
+     file had before this fix — that mechanism is unchanged. */
   .sidebar {
     position: fixed;
     top: 0;
     left: 0;
     height: 100%;
-    width: 280px;
-    max-width: 85vw;
+    width: 64px;
+    max-width: 64px;
     background: var(--card);
     z-index: 200;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    padding: 52px 20px 20px;
+    transition: width 0.25s ease, max-width 0.25s ease, padding 0.25s ease;
+    padding: 14px 4px;
     overflow-y: auto;
+    overflow-x: hidden;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.12);
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .sidebar.open {
+    width: 280px;
+    max-width: 85vw;
+    padding: 52px 20px 20px;
+    align-items: stretch;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.18);
+  }
+  .sidebar-close { display: none; }
+  .sidebar.open .sidebar-close { display: block; }
+
+  /* Rail content collapse — default (closed) state only; .sidebar.open
+     shows the regular full-labelled drawer content untouched. Same
+     icon-collapse techniques as the desktop .sidebar.is-rail block
+     above (hidden labels, the .cal-toggle/.cal-color swatch-overlay
+     trick for a clickable colour-swatch toggle, the .new-event-btn
+     font-size:0 + generated "+" trick) — re-declared here rather than
+     sharing the rule text with that block because touch targets need to
+     be >=40px here (vs 36px for desktop's mouse target) and this
+     sidebar is a fixed overlay rather than an in-flow flex item, so the
+     two rail states aren't styled by the same selectors. */
+  .sidebar:not(.open) h2,
+  .sidebar:not(.open) .provider-links,
+  .sidebar:not(.open) .cal-name,
+  .sidebar:not(.open) .cal-open-btn {
+    display: none;
+  }
+  .sidebar:not(.open) #sidebar-toggle,
+  .sidebar:not(.open) #sync-btn,
+  .sidebar:not(.open) .settings-link,
+  .sidebar:not(.open) #logout-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    gap: 0;
+    align-self: center;
     flex: none;
   }
-  .sidebar.open { transform: translateX(0); }
-  .sidebar-close { display: block; }
+  .sidebar:not(.open) .new-event-btn {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    font-size: 0;
+    align-self: center;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sidebar:not(.open) .new-event-btn::before {
+    content: '+';
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .sidebar:not(.open) .cal-item {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    justify-items: center;
+    align-items: center;
+    padding: 4px;
+    gap: 0;
+  }
+  .sidebar:not(.open) .cal-toggle,
+  .sidebar:not(.open) .cal-color {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .sidebar:not(.open) .cal-color {
+    width: 26px;
+    height: 26px;
+    pointer-events: none;
+  }
+  .sidebar:not(.open) .cal-toggle {
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .sidebar:not(.open) .cal-toggle:not(:checked) ~ .cal-color {
+    opacity: 0.35;
+  }
 
-  /* Layout & main fill remaining width */
+  /* Layout & main fill remaining width. The 64px rail is fixed/overlay
+     (out of normal flow), so main needs its own left clearance or the
+     calendar grid would start underneath it. The open drawer overlays
+     on top of this (dimmed by #sidebar-backdrop) rather than pushing
+     content over, so main's padding doesn't need to change when open. */
   .layout { overflow: hidden; }
-  main { padding: 8px 8px 0; }
+  main { padding: 8px 8px 0 76px; }
   #calendar { padding: 8px; border-radius: 8px; }
 
   /* FullCalendar mobile tweaks */
@@ -346,7 +719,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
 .ics-panel summary em { color: var(--muted); font-style: italic; }
 .ics-body { padding-top: 10px; }
 .hint { color: var(--muted); font-size: 0.83rem; margin: 0 0 10px; }
-.hint code { background: #f0f1f3; padding: 1px 5px; border-radius: 4px; }
+.hint code { background: var(--hover); padding: 1px 5px; border-radius: 4px; }
 
 .ics-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .ics-form input {
@@ -354,6 +727,8 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.88rem;
+  background: var(--card);
+  color: var(--text);
 }
 .ics-form input#ics-name { flex: 0 0 160px; }
 .ics-form input#ics-url { flex: 1 1 280px; }
@@ -363,7 +738,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: #f0f1f3;
+  background: var(--hover);
   border-radius: 16px;
   padding: 4px 6px 4px 12px;
   font-size: 0.85rem;
@@ -375,7 +750,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   color: var(--muted);
   font-size: 0.85rem;
 }
-.ics-remove:hover { color: #dc2626; background: transparent; }
+.ics-remove:hover { color: var(--danger); background: transparent; }
 
 .muted { color: var(--muted); }
 
@@ -417,6 +792,8 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   border-radius: 6px;
   font-size: 0.9rem;
   min-width: 180px;
+  background: var(--card);
+  color: var(--text);
 }
 .field.row input[type='checkbox'] { width: 18px; height: 18px; }
 .saved-note { color: var(--g); font-size: 0.85rem; height: 1em; margin: 10px 0 0; }
@@ -434,7 +811,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -461,7 +838,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   color: var(--muted);
   padding: 4px 8px;
 }
-.modal-close:hover { background: #f0f1f3; }
+.modal-close:hover { background: var(--hover); }
 .modal-row {
   display: flex;
   align-items: center;
@@ -546,9 +923,9 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.guest-accepted { color: var(--g); border-color: #bbf7d0; }
-.guest-declined { color: #b91c1c; border-color: #fecaca; text-decoration: line-through; }
-.guest-tentative { color: #b45309; border-color: #fde68a; }
+.guest-accepted { color: var(--g); border-color: var(--guest-accepted-border); }
+.guest-declined { color: var(--guest-declined-text); border-color: var(--guest-declined-border); text-decoration: line-through; }
+.guest-tentative { color: var(--guest-tentative-text); border-color: var(--guest-tentative-border); }
 .guest-needsAction { color: var(--muted); }
 .modal-open {
   display: inline-block;
@@ -579,7 +956,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   font-weight: 600;
   text-align: left;
 }
-.new-event-btn:hover { background: #f0fdf4; }
+.new-event-btn:hover { background: var(--success-soft-bg); }
 
 /* ── Edit button inside event detail modal ── */
 .modal-edit {
@@ -588,7 +965,7 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   border-color: var(--border);
   background: transparent;
 }
-.modal-edit:hover { background: #f0f1f3; }
+.modal-edit:hover { background: var(--hover); }
 
 /* ── Event create/edit form modal ── */
 .event-form { max-width: 480px; }
@@ -618,6 +995,8 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
   font-family: inherit;
   width: 100%;
   box-sizing: border-box;
+  background: var(--card);
+  color: var(--text);
 }
 .form-field textarea { resize: vertical; }
 .field-hint { font-size: 0.75rem; color: var(--muted); }
@@ -635,9 +1014,9 @@ main { padding: 20px 24px; flex: 1; min-width: 0; overflow: hidden; height: 100%
 .ef-actions-right { display: flex; gap: 8px; }
 
 button.primary { background: var(--g); color: #fff; border-color: var(--g); }
-button.primary:hover { background: #15803d; border-color: #15803d; }
-button.danger { color: #dc2626; border-color: #fca5a5; background: transparent; }
-button.danger:hover { background: #fee2e2; }
+button.primary:hover { background: var(--g-hover); border-color: var(--g-hover); }
+button.danger { color: var(--danger); border-color: var(--danger-border); background: transparent; }
+button.danger:hover { background: var(--danger-bg); }
 
 /* ── CalDAV account form (settings page) ── */
 .caldav-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
@@ -646,6 +1025,8 @@ button.danger:hover { background: #fee2e2; }
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 0.88rem;
+  background: var(--card);
+  color: var(--text);
 }
 .caldav-form input#caldav-server { flex: 1 1 200px; }
 .caldav-form input#caldav-username { flex: 1 1 160px; }
@@ -691,7 +1072,7 @@ button.danger:hover { background: #fee2e2; }
   padding: 8px 16px;
   cursor: pointer;
 }
-.search-item:hover, .search-item.selected { background: #f0f1f3; }
+.search-item:hover, .search-item.selected { background: var(--hover); }
 .search-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
 .search-item-icon { font-size: 0.9rem; flex: 0 0 auto; }
 .search-item-content {
@@ -733,7 +1114,7 @@ button.danger:hover { background: #fee2e2; }
   font-size: 0.72rem;
   color: var(--muted);
   border-top: 1px solid var(--border);
-  background: #fafafa;
+  background: var(--surface-soft);
   text-align: right;
 }
 
@@ -785,3 +1166,362 @@ button.danger:hover { background: #fee2e2; }
 .ics-name-input:hover { border-color: var(--border); background: var(--card); }
 .ics-name-input:focus { border-color: var(--g); background: var(--card); outline: none; }
 .gcal-actions { margin-top: 12px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   View-configuration feature styling (theme / spent days / today /
+   important events / compact density). Consumes the attributes and
+   classes defined in the app.js ⇄ styles.css DOM contract:
+     <html data-theme="light|dark">
+     <body data-spent="off|dim|strike|hatch" data-density="titles|dots|emphasised"
+           data-today-hl="on|off">
+     .day-spent (day cell), .evt-important / .evt-past (event),
+     .is-compact (calendar root, while a multiMonth view is active)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Spent days (.day-spent, gated by body[data-spent]) ──
+   data-spent="off" intentionally has no rule below — .day-spent renders
+   with no visual change in that mode. */
+
+/* dim: fade the cell's own background + day number; events stay untouched
+   since they live in a sibling container, not a descendant of the parts
+   we dim, so their opacity is never affected. */
+body[data-spent='dim'] .day-spent .fc-daygrid-day-frame {
+  background-color: var(--hover);
+}
+body[data-spent='dim'] .day-spent .fc-daygrid-day-top {
+  opacity: 0.4;
+}
+
+/* strike: one diagonal line corner-to-corner via background-image — never
+   a pseudo-element, so nothing can intercept clicks on the cell/events. */
+body[data-spent='strike'] .day-spent .fc-daygrid-day-frame {
+  background-image: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    var(--muted) calc(50% - 1px),
+    var(--muted) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+  background-repeat: no-repeat;
+}
+
+/* hatch: light repeating diagonal fill, subtle enough to keep event text
+   readable on top of it. */
+body[data-spent='hatch'] .day-spent .fc-daygrid-day-frame {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--hover-strong) 0,
+    var(--hover-strong) 2px,
+    transparent 2px,
+    transparent 9px
+  );
+}
+
+/* ── Today (.fc-day-today, FullCalendar's own class) ──
+   "on" is a visibly stronger treatment than any spent-day styling, so it
+   reads as the boundary between past and future. "off" neutralises
+   FullCalendar's own default today tint. */
+body[data-today-hl='on'] .fc-day-today {
+  background: var(--today-tint) !important;
+  box-shadow: inset 0 0 0 2px var(--ms);
+}
+body[data-today-hl='off'] .fc-day-today {
+  background: transparent !important;
+  box-shadow: none;
+}
+
+/* ── Important / past events ──
+   Box-shadow (not border) is used for the accent so it can never be
+   silently overridden by FullCalendar's own per-event inline
+   background/border-color styling. */
+.fc-event.evt-important {
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 0 var(--important-accent), 0 0 0 1px var(--important-ring);
+}
+.fc-event.evt-past {
+  opacity: 0.6;
+}
+/* Important wins outright over past de-emphasis when an event is both. */
+.fc-event.evt-important.evt-past {
+  opacity: 1;
+}
+
+/* ── Compact density (.is-compact on the calendar root, multiMonth views only) ──
+   data-density="titles" needs no rules — normal FullCalendar rendering.
+   "dots" and "emphasised" share the same flex-wrap infrastructure so
+   dots reflow sensibly inside small multi-month/year cells; they differ
+   only in which events get shrunk to a dot. */
+body[data-density='dots'] .is-compact .fc-daygrid-day-events,
+body[data-density='emphasised'] .is-compact .fc-daygrid-day-events {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 2px;
+}
+body[data-density='dots'] .is-compact .fc-daygrid-day-bottom,
+body[data-density='emphasised'] .is-compact .fc-daygrid-day-bottom {
+  flex-basis: 100%;
+  order: 99;
+}
+/* position:static neutralises FullCalendar's inline per-row `top` offset
+   (a statically positioned element ignores top/left entirely) so the
+   flex-wrap layout above takes over the stacking. */
+body[data-density='dots'] .is-compact .fc-daygrid-event-harness,
+body[data-density='emphasised'] .is-compact .fc-daygrid-event-harness {
+  position: static !important;
+}
+
+/* dots: every event collapses to a small coloured dot. The event's own
+   background-color is left alone (FullCalendar sets it per-event from the
+   calendar's colour), so the dot keeps the calendar colour automatically.
+   The title/time text is not display:none'd — it's visually hidden with
+   the standard clip-based technique so it stays in the accessibility
+   tree as the link's accessible name, and the element remains a normal
+   clickable <a>. */
+body[data-density='dots'] .is-compact .fc-daygrid-event,
+body[data-density='emphasised'] .is-compact .fc-daygrid-event:not(.evt-important) {
+  display: inline-flex;
+  width: 9px;
+  height: 9px;
+  min-height: 9px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: hidden;
+}
+body[data-density='dots'] .is-compact .fc-daygrid-event .fc-event-main-frame,
+body[data-density='emphasised'] .is-compact .fc-daygrid-event:not(.evt-important) .fc-event-main-frame {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* emphasised: important events keep their full title chip on its own
+   line; only non-important events (styled above) become dots. */
+body[data-density='emphasised'] .is-compact .fc-daygrid-event.evt-important {
+  flex: 0 0 100%;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Round 2 additions. Consumes the attribute/class contract from
+   CONTRACT2.md §3:
+     <body data-weekends="off|tint|muted|divider">
+     .fc-day-sat / .fc-day-sun (FullCalendar's own, verified in the bundle)
+     .is-rail (on .sidebar — see the sidebar section above)
+     data-imp="N" (on .fc-daygrid-day, integer >= 1, absent when zero)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── 4d. Weekend styling (body[data-weekends]) ──
+   "off" is intentionally absent below — no rule means no visual change,
+   a true no-op, matching data-spent="off" above.
+
+   All three active modes touch either .fc-daygrid-day-frame's generated
+   ::before layer or box-shadow/opacity — never background-color/
+   background-image directly on .fc-daygrid-day-frame itself, because
+   .day-spent (dim/strike/hatch, above) already owns that property on
+   that exact element. Layering on a pseudo-element instead means both
+   features paint their own layer and compose, rather than one silently
+   overwriting the other. The pseudo is pointer-events:none and sits
+   below FullCalendar's own day-number (z-index:4) and events (z-index:6)
+   — verified against the bundled fullcalendar@6.1.15 CSS, which uses
+   this exact z-index:1 convention for its own background layers
+   (.fc-non-business etc. inside .fc-daygrid-day-bg) — so it never
+   intercepts clicks or hides content. */
+body[data-weekends='tint'] .fc-daygrid-day.fc-day-sat .fc-daygrid-day-frame::before,
+body[data-weekends='tint'] .fc-daygrid-day.fc-day-sun .fc-daygrid-day-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--weekend-tint-bg);
+}
+body[data-weekends='tint'] .fc-col-header-cell.fc-day-sat,
+body[data-weekends='tint'] .fc-col-header-cell.fc-day-sun {
+  background-color: var(--weekend-tint-bg);
+}
+
+/* muted: no background change — only fade the day number and the column
+   header label. Composes with .day-spent's own opacity (set on the
+   sibling .fc-daygrid-day-top, not this element) by nesting rather than
+   competing: a past weekend day ends up more faded than either alone,
+   which reads as "further de-emphasised", not broken. */
+body[data-weekends='muted'] .fc-daygrid-day.fc-day-sat .fc-daygrid-day-number,
+body[data-weekends='muted'] .fc-daygrid-day.fc-day-sun .fc-daygrid-day-number {
+  opacity: 0.45;
+}
+body[data-weekends='muted'] .fc-col-header-cell.fc-day-sat .fc-col-header-cell-cushion,
+body[data-weekends='muted'] .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion {
+  opacity: 0.45;
+  font-weight: 400;
+}
+
+/* divider: a stronger rule on Saturday's leading edge, via box-shadow
+   (not border) per this file's house style — see the .fc-day-today
+   comment above — so it can't shift cell widths or get silently
+   overridden by FullCalendar's own inline per-cell styling. */
+body[data-weekends='divider'] .fc-daygrid-day.fc-day-sat {
+  box-shadow: inset 2px 0 0 0 var(--weekend-divider);
+}
+body[data-weekends='divider'] .fc-col-header-cell.fc-day-sat {
+  box-shadow: inset 2px 0 0 0 var(--weekend-divider);
+}
+/* .fc-day-today sets its own box-shadow with !important (above); when
+   today IS Saturday, that would otherwise replace the divider outright
+   rather than compose with it, since box-shadow is a single-value
+   property. This rule explicitly merges both shadows into one value for
+   that intersection so neither is lost. */
+body[data-weekends='divider'] .fc-day-today.fc-day-sat {
+  box-shadow: inset 0 0 0 2px var(--ms), inset 2px 0 0 0 var(--weekend-divider) !important;
+}
+
+/* ── 4c. Important-event overflow marker (compact multi-month views) ──
+   Width ladder:
+     1. title fits              → shown as-is (default FullCalendar layout)
+     2. title too long          → ellipsis-truncated in place
+     3. cell too narrow for any → chips hidden, single "★N" marker shown
+        meaningful text
+
+   Mechanism: CSS container queries (container-type:inline-size on the
+   day cell), preferred per CONTRACT2.md §4c over a width-based media
+   query / :has() fallback — every browser this app targets supports
+   named container queries, so no fallback was needed. The container is
+   named so the @container rule below can't accidentally match some
+   other ancestor that also happens to set container-type. */
+/* The container MUST be the inner <div>, not the .fc-daygrid-day <td>: size
+   containment does not apply to internal table elements, so container-type on a
+   table-cell is reported by getComputedStyle but never resolves, and every
+   @container rule against it silently fails to match. */
+.is-compact .fc-daygrid-day-frame {
+  container-type: inline-size;
+  container-name: daycell;
+}
+
+/* Steps 1+2: always-on ellipsis truncation for important events' titles
+   in compact views. FullCalendar's own .fc-daygrid-dot-event/.fc-h-event
+   rules already set overflow:hidden + min-width:0 on .fc-event-title —
+   verified in the bundle — this just adds the visible "…" and forces
+   single-line layout, so a title that fits renders unchanged (step 1)
+   and one that doesn't gets truncated (step 2) with a single rule. */
+.is-compact .fc-daygrid-event.evt-important .fc-event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Step 3: below the width threshold, swap the important-event chip(s)
+   for a single "★N" marker. The marker is generated on the day cell
+   itself (where app.js maintains data-imp), absolutely positioned in
+   its corner so it never adds row height, and pointer-events:none so it
+   never blocks the day cell's own click target. Non-important events
+   are untouched — they keep round 1's dot behaviour at any width.
+
+   TUNABLE THRESHOLD — the only number in this file that decides when
+   step 3 kicks in is the "120px" on the very next line. Measured in a
+   real render at a 1489px window: Month cells are 168px, but 2 mo is
+   78px, 4 mo 77px and Year 50px — so no compact view has room for a
+   meaningful title at that width. 120px puts all three compact views on
+   the marker there, while still allowing truncated titles on a wide
+   external monitor. Container-query conditions can't take a var(), so
+   change this literal directly — nothing else depends on it. */
+/* Compact views: keep event chips inside their own day cell. Round 1 removed
+   FullCalendar's absolute positioning from the harness so dots could wrap,
+   which left the nowrap title free to expand the chip to its full text width —
+   a long important event then spilled across neighbouring days and even into
+   the next month panel. Measured before this fix: a 77px cell held a 340px
+   chip, overflowing by 267px. */
+.is-compact .fc-daygrid-day-events,
+.is-compact .fc-daygrid-event-harness {
+  max-width: 100%;
+  min-width: 0;
+}
+.is-compact .fc-daygrid-event {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Only the TITLE truncates. Letting .fc-event-time shrink too collapsed it to
+   zero width and rendered a bare "1…" ellipsis; at compact cell widths the
+   clock time eats most of the row anyway, so hide it and spend the space on
+   the name. */
+.is-compact .fc-daygrid-event .fc-event-time {
+  display: none;
+}
+.is-compact .fc-daygrid-event .fc-event-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container daycell (max-width: 120px) {
+  .is-compact .fc-daygrid-day-events[data-imp] .fc-daygrid-event.evt-important {
+    display: none;
+  }
+  /* Rendered as a normal flex item beside the dots rather than absolutely
+     positioned: with every important chip hidden the events row can collapse to
+     zero height, which would hide an absolute marker. */
+  .is-compact .fc-daygrid-day-events[data-imp]::after {
+    content: '★' attr(data-imp);
+    padding: 1px 3px;
+    line-height: 1;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--important-accent);
+    pointer-events: none;
+  }
+  /* Just the star, no "1", when there's exactly one important event. */
+  .is-compact .fc-daygrid-day-events[data-imp='1']::after {
+    content: '★';
+  }
+}
+
+/* ── Sidebar: fully collapsed ──────────────────────────────────────────────
+   Replaces the earlier icon rail. When collapsed the sidebar is removed from
+   the layout entirely and the calendar takes the full width; a single small
+   arrow pinned to the left edge is the only thing left to bring it back.
+   app.js calls calendar.updateSize() after toggling so the grid re-measures
+   instead of keeping its old width. */
+.sidebar-restore {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  width: 22px;
+  height: 60px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  background: var(--card);
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.18);
+}
+.sidebar-restore:hover { background: var(--hover); }
+
+body.sidebar-collapsed .sidebar { display: none; }
+body.sidebar-collapsed .sidebar-restore { display: flex; }
+
+@media (max-width: 768px) {
+  /* The mobile rail is also removed when collapsed, so drop the gutter that
+     was reserved for it. */
+  body.sidebar-collapsed main { padding-left: 0; }
+  .sidebar-restore { height: 72px; width: 26px; }
+}

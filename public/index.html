@@ -8,18 +8,40 @@
   <link rel="apple-touch-icon" href="/icon.svg">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#ffffff">
+  <script>
+    // Resolve and apply the theme before first paint, to avoid a flash of the
+    // wrong theme. Reconciled against the server value once settings load.
+    (function () {
+      var stored = localStorage.getItem('cal_theme');
+      var resolved = stored === 'light' || stored === 'dark'
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = resolved;
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css" />
   <!-- FullCalendar (month/week/day views) from CDN -->
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-left">
-      <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle calendars sidebar">☰</button>
-      <h1>📅 Unified Calendar</h1>
-    </div>
-    <div class="topbar-right">
-      <div class="status" id="status"><!-- compact connection chips --></div>
+  <div id="banner" class="banner hidden"></div>
+
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle calendars sidebar">☰</button>
+        <h1 class="sidebar-brand">📅 Unified Calendar</h1>
+        <button class="sidebar-rail-toggle" id="sidebar-rail-toggle" aria-label="Hide sidebar" title="Hide sidebar">«</button>
+        <button class="sidebar-close" id="sidebar-close" aria-label="Close sidebar">✕</button>
+      </div>
+
+      <div class="sidebar-status">
+        <div class="status" id="status"><!-- compact connection chips --></div>
+        <span class="last-synced" id="last-synced"></span>
+      </div>
+
       <div class="jump-to">
         <select id="jump-month">
           <option value="0">January</option>
@@ -37,20 +59,9 @@
         </select>
         <select id="jump-year"><!-- populated by JS --></select>
       </div>
-      <span class="last-synced" id="last-synced"></span>
+
       <button id="sync-btn" class="sync-btn" title="Refresh events from all calendars"><span class="sync-icon">⟳</span><span class="sync-label"> Sync</span></button>
-      <a class="settings-link" href="/settings.html">⚙<span class="settings-label"> Settings</span></a>
-      <button id="logout-btn" class="logout-btn hidden" title="Sign out">↩</button>
-    </div>
-  </header>
 
-  <div id="banner" class="banner hidden"></div>
-
-  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
-
-  <div class="layout">
-    <aside class="sidebar" id="sidebar">
-      <button class="sidebar-close" id="sidebar-close" aria-label="Close sidebar">✕</button>
       <h2>Calendars</h2>
       <ul id="calendars" class="cal-list"></ul>
       <button class="new-event-btn hidden" id="new-event-btn">+ New event</button>
@@ -58,7 +69,15 @@
         <button class="provider-link-btn" id="open-google">Google Calendar ↗</button>
         <button class="provider-link-btn" id="open-outlook">Outlook ↗</button>
       </div>
+
+      <div class="sidebar-footer">
+        <a class="settings-link" href="/settings.html">⚙<span class="settings-label"> Settings</span></a>
+        <button id="logout-btn" class="logout-btn hidden" title="Sign out">↩</button>
+      </div>
     </aside>
+
+      <!-- Only control left on screen once the sidebar is fully hidden. -->
+      <button class="sidebar-restore" id="sidebar-restore" aria-label="Show sidebar" title="Show sidebar">»</button>
     <main>
       <div id="calendar"></div>
     </main>
@@ -75,6 +94,7 @@
       <div class="modal-row modal-guests" id="modal-guests"></div>
       <div class="modal-desc" id="modal-description"></div>
       <a class="modal-open" id="modal-open" href="#" target="_blank" rel="noopener">Open original ↗</a>
+      <button class="modal-edit" id="modal-important">★ Mark important</button>
       <button class="modal-edit hidden" id="modal-edit">Edit</button>
     </div>
   </div>

@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Settings · Unified Calendar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>">
+  <script>
+    // Resolve and apply the theme before first paint, to avoid a flash of the
+    // wrong theme. Reconciled against the server value once settings load.
+    (function () {
+      var stored = localStorage.getItem('cal_theme');
+      var resolved = stored === 'light' || stored === 'dark'
+        ? stored
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = resolved;
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -29,9 +40,13 @@
       <div class="field">
         <label for="defaultView">Default view</label>
         <select id="defaultView">
+          <option value="timeGridDay">Day</option>
           <option value="timeGridWeek">Week</option>
           <option value="dayGridMonth">Month</option>
-          <option value="timeGridDay">Day</option>
+          <option value="multiMonth2">2 mo</option>
+          <option value="multiMonth4">4 mo</option>
+          <option value="multiMonthYear">Year</option>
+          <option value="listMonth">Agenda</option>
         </select>
       </div>
       <div class="field">
@@ -56,6 +71,81 @@
         </select>
       </div>
       <p class="saved-note" id="saved-note"></p>
+    </section>
+
+    <!-- View -->
+    <section class="card">
+      <h2>View</h2>
+      <p class="hint">Which views appear as buttons on the main calendar, and how it renders. At least one view must stay checked.</p>
+      <div class="field row">
+        <label for="view-timeGridDay">Day</label>
+        <input type="checkbox" class="view-check" id="view-timeGridDay" data-view-id="timeGridDay" />
+      </div>
+      <div class="field row">
+        <label for="view-timeGridWeek">Week</label>
+        <input type="checkbox" class="view-check" id="view-timeGridWeek" data-view-id="timeGridWeek" />
+      </div>
+      <div class="field row">
+        <label for="view-dayGridMonth">Month</label>
+        <input type="checkbox" class="view-check" id="view-dayGridMonth" data-view-id="dayGridMonth" />
+      </div>
+      <div class="field row">
+        <label for="view-multiMonth2">2 mo</label>
+        <input type="checkbox" class="view-check" id="view-multiMonth2" data-view-id="multiMonth2" />
+      </div>
+      <div class="field row">
+        <label for="view-multiMonth4">4 mo</label>
+        <input type="checkbox" class="view-check" id="view-multiMonth4" data-view-id="multiMonth4" />
+      </div>
+      <div class="field row">
+        <label for="view-multiMonthYear">Year</label>
+        <input type="checkbox" class="view-check" id="view-multiMonthYear" data-view-id="multiMonthYear" />
+      </div>
+      <div class="field row">
+        <label for="view-listMonth">Agenda</label>
+        <input type="checkbox" class="view-check" id="view-listMonth" data-view-id="listMonth" />
+      </div>
+      <div class="field">
+        <label for="spentDays">Spent days</label>
+        <select id="spentDays">
+          <option value="off">Off</option>
+          <option value="dim">Dimmed</option>
+          <option value="strike">Diagonal strike</option>
+          <option value="hatch">Hatched</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="weekends">Weekends</label>
+        <select id="weekends">
+          <option value="off">Off</option>
+          <option value="tint">Tinted background</option>
+          <option value="muted">Muted day numbers</option>
+          <option value="divider">Divider line</option>
+        </select>
+      </div>
+      <div class="field row">
+        <label for="highlightToday">Highlight today</label>
+        <input type="checkbox" id="highlightToday" />
+      </div>
+      <div class="field">
+        <label for="compactDensity">Compact view density</label>
+        <select id="compactDensity">
+          <option value="emphasised">Important events only</option>
+          <option value="dots">Coloured dots only</option>
+          <option value="titles">Event titles</option>
+        </select>
+      </div>
+      <p class="hint">Applies to the 2-month, 4-month and Year views.</p>
+      <div class="field">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="system">Follow system</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+      <p class="view-error hint" id="view-error"></p>
+      <p class="saved-note" id="view-saved-note"></p>
     </section>
 
     <!-- Account logins -->
