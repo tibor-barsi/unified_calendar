@@ -128,7 +128,9 @@ done
 
 remove_keybind() {
   [[ -f "$BINDINGS" ]] || return 0
-  grep -qF "$BIND_BEGIN" "$BINDINGS" || return 0
+  # "--" first: $BIND_BEGIN is a Lua comment, so it starts with "--" and grep would
+  # otherwise parse it as an option and error out, silently skipping the removal.
+  grep -qF -- "$BIND_BEGIN" "$BINDINGS" || return 0
   backup "$BINDINGS"
   # Drop the marked block, markers included, and nothing else. The blank line that
   # preceded it stays — harmless, and far better than guessing at a line we did not
@@ -412,8 +414,20 @@ if [[ -f "$SHELL_JSON" && -z "${skip_shell_json:-}" ]]; then
   ' "$SHELL_JSON" > "$tmp" || { rm -f -- "$tmp"; die "could not edit $SHELL_JSON"; }
 
   # Prove the edit changed serverUrl and nothing else before it goes live.
-  if ! diff -q <(jq -S "walk(if type == \"object\" and has(\"serverUrl\") then del(.serverUrl) else . end)" "$SHELL_JSON") \
-                <(jq -S "walk(if type == \"object\" and has(\"serverUrl\") then del(.serverUrl) else . end)" "$tmp") >/dev/null; then
+  #
+  # Normalising has to account for the one structural change we do intend: a bar
+  # entry written as the bare string "unified.clock" cannot carry settings, so the
+  # transform promotes it to { id: "unified.clock" }. Comparing raw would flag that
+  # as "changed more than serverUrl" and abort a perfectly correct install, so both
+  # sides are promoted first and only then stripped of serverUrl. Any other
+  # difference — a reordered bar, a dropped widget, an edited setting — still trips.
+  norm='
+    (if (.bar.layout? | type) == "object"
+       then .bar.layout |= with_entries(.value |= map(if type == "string" then { id: . } else . end))
+       else . end)
+    | walk(if type == "object" and has("serverUrl") then del(.serverUrl) else . end)
+  '
+  if ! diff -q <(jq -S "$norm" "$SHELL_JSON") <(jq -S "$norm" "$tmp") >/dev/null; then
     rm -f -- "$tmp"
     die "the shell.json edit would have changed more than serverUrl — left it alone"
   fi
@@ -454,9 +468,9 @@ fi
 if (( do_keybind )); then
   if [[ ! -f "$BINDINGS" ]]; then
     warn "no $BINDINGS — skipping the keybinding"
-  elif grep -qF "$BIND_BEGIN" "$BINDINGS"; then
+  elif grep -qF -- "$BIND_BEGIN" "$BINDINGS"; then
     info "already bound"
-  elif grep -q "^[^-]*[\"']$BIND_KEY[\"']" "$BINDINGS"; then
+  elif grep -q -- "^[^-]*[\"']$BIND_KEY[\"']" "$BINDINGS"; then
     # Someone already bound this key by hand (this repo's own author did). Adding
     # our block would leave two binds on one key, so say so and leave it alone.
     info "$BIND_KEY is already bound in $(basename "$BINDINGS") — leaving it as it is"
