@@ -140,10 +140,10 @@ boot; it does not stop the server.
 
 ## Widget API
 
-Two JSON endpoints serve the desktop widget (`omarchy-widget/`). Both send
-`Cache-Control: no-store`, never touch the session cookie, and — when
-`AUTH_PASSWORD` is set — require the same `cal_auth` cookie as the web app
-(otherwise `401`).
+Five JSON endpoints serve the desktop widget (`omarchy-widget/`) — two for
+events, three for CalDAV tasks. All five send `Cache-Control: no-store`, never
+touch the session cookie, and — when `AUTH_PASSWORD` is set — require the same
+`cal_auth` cookie as the web app (otherwise `401`).
 
 **`GET /api/widget/events?start=YYYY-MM-DD&end=YYYY-MM-DD`**
 
@@ -188,11 +188,73 @@ running the old code rewrites it on the next widget poll.
 
 This flag does **not** reach the desktop widget's own cache. Whatever the flag
 is set to, the widget writes every range it fetched to
-`~/.cache/unified-calendar-widget.json` exactly as the API returned it — full
-event bodies, `notes` (descriptions), `location` and `meetingUrl` included — so
-its panel can still render while the server is down. That copy is
-unconditional: there is no setting that turns it off. Delete the file to clear
-it (the widget rewrites it on the next poll).
+`~/.cache/unified-calendar-widget/events.json` — before 0.2 a single flat file,
+`~/.cache/unified-calendar-widget.json` (see the widget's own README for the
+migration) — exactly as the API returned it: full event bodies, `notes`
+(descriptions), `location` and `meetingUrl` included, so its panel can still
+render while the server is down. Tasks get the same unconditional treatment in
+a sibling file, `tasks.json` — neither has a setting that turns it off. Delete
+a file to clear it; the widget rewrites it on the next poll.
+
+### Tasks (VTODO)
+
+Three more JSON endpoints, alongside the two above, read and write tasks from
+the same CalDAV account. They follow the same rules: `Cache-Control: no-store`,
+no session cookie, and the `cal_auth` cookie when `AUTH_PASSWORD` is set.
+
+**`GET /api/widget/tasks`** → `{ tasks, lists, syncedAt, errors }`. Each task
+is `{ id, uid, title, notes, status, completed, completedAt, due, dueHasTime,
+start, priority, percent, categories, listId, listName, listUrl, accountId,
+etag }`. `due` is a plain `YYYY-MM-DD` for a date-only DUE, or an ISO UTC
+string when it carries a time — `dueHasTime` says which. A list that fails to
+fetch is reported in `errors` as `{ listId, message }`; the other lists still
+return their tasks. No CalDAV account configured is not an error: `tasks` and
+`lists` come back empty with `200`.
+
+**`POST /api/widget/tasks`** — body `{ text, listId? }`, `text` 1-500
+characters, parsed with the quick-add grammar below. Returns `{ task }` and
+`201`. An unknown `listId` is `404`; text that parses down to an empty title is
+`400`.
+
+**`POST /api/widget/tasks/complete`** — body `{ id, completed }`. Returns
+`{ task }`, or `409` when the task changed on the server since it was fetched
+(an etag mismatch) — refetch and retry rather than overwrite someone else's
+edit.
+
+Task-list discovery is a PROPFIND, expensive enough that it's cached in memory
+for an hour rather than repeated on every poll. A failed discovery is never
+cached, so the next call retries it.
+
+**Quick-add syntax**, used by `POST /api/widget/tasks` and the widget's own
+quick-add field:
+
+| Token | Means |
+|---|---|
+| `@word` | a category (repeatable) |
+| `!1`-`!9` | priority |
+| `due:<when>` | see below |
+| everything left over | the title |
+
+`due:` accepts `today`, `tomorrow`, a weekday name (`friday`/`fri`, meaning the
+next such day, never today), `YYYY-MM-DD`, `D.M.` or `D.M.YYYY`, `+3d`, `+2w`.
+An unparseable `due:` token stays in the title rather than being dropped.
+Tokens are only recognised as whole, whitespace-separated words, so an email
+address or `!important` inside running text is left alone.
+
+**What the CalDAV server keeps.** These are limits of the Open-Xchange
+(mailbox.org) backend, checked against a live server — not of this code:
+
+- Only `DTSTART`, `DUE`, `CATEGORIES`, `SUMMARY`, `PRIORITY`, `DESCRIPTION`,
+  `VALARM`, `STATUS`, `PERCENT-COMPLETE` and `COMPLETED` survive a round trip;
+  anything else is silently discarded.
+- No recurring tasks — an `RRULE` on a VTODO is rejected — and no subtasks:
+  `RELATED-TO` is dropped.
+- Priority collapses to three buckets on save: 1-2 → 1, 3-6 → 5, 7-9 → 9, so a
+  task added as `!2` comes back as `!1`. The client collapses to the same
+  buckets before displaying a value, so a refresh never changes what's on
+  screen.
+- `sync-collection` is advertised but unreliable for task collections in
+  practice, so every poll does a full fetch instead of an incremental one.
 
 ---
 
