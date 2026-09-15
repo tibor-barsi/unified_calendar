@@ -53,6 +53,10 @@ import {
   createCalDavEvent,
   updateCalDavEvent,
   deleteCalDavEvent,
+  discoverTaskLists,
+  fetchCalDavTasks,
+  createCalDavTask,
+  updateCalDavTask,
 } from './src/caldav.js';
 import { registerWidgetRoutes, importantBodyError } from './src/widget-routes.js';
 import {
@@ -68,10 +72,11 @@ const app = express();
 loadFeeds();
 loadSettings();
 
-// The CalDAV password belongs in the keyring, not settings.json. Migration blanks the plaintext
-// copy only after reading the keyring copy back intact; hydration then puts it back in memory, so
-// every CalDAV call site below goes on reading `account.password` unchanged while the store keeps
-// that value off disk. With no keyring on the machine both steps no-op.
+// CalDAV passwords belong in gnome-keyring, not settings.json. The migration only blanks the
+// plaintext copy after reading the keyring copy back intact, and hydration then puts the password
+// back in memory — so every CalDAV call site below keeps reading `account.password` unchanged,
+// while the store makes sure that value never reaches disk again. With no keyring on the machine
+// both steps no-op and the plaintext password keeps working.
 await migratePlaintextPasswords({ getCaldavAccounts, clearCaldavPassword });
 await hydrateKeyringPasswords({ getCaldavAccounts, hydrateCaldavPassword });
 
@@ -104,6 +109,10 @@ registerWidgetRoutes(app, {
   saveTokens,
   listCalendars,
   setEventImportant,
+  discoverTaskLists,
+  fetchCalDavTasks,
+  createCalDavTask,
+  updateCalDavTask,
   // Off unless UNIFIED_CALENDAR_WIDGET_CACHE is set: the null store keeps event data off disk.
   cacheStore: widgetCacheEnabled() ? createWidgetCacheStore({ dir: DATA_DIR }) : createNullCacheStore(),
   isAuthorized,
