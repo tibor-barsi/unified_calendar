@@ -103,9 +103,26 @@ function persist() {
   writePrivate(FILE, 'feeds.json', JSON.stringify(feeds, null, 2));
 }
 
-// settings.json holds the OAuth access and refresh tokens and the CalDAV password in plaintext.
+// Accounts whose password now lives in gnome-keyring. Their in-memory copy is hydrated at startup
+// so every existing caller can go on reading account.password unchanged, but it must never travel
+// back to disk: starring a single event persists settings, so without this the very next star
+// would rewrite the plaintext the migration had just removed.
+const keyringBacked = new Set();
+
+function settingsForDisk() {
+  if (keyringBacked.size === 0) return settings;
+  return {
+    ...settings,
+    caldavAccounts: (settings.caldavAccounts || []).map((a) =>
+      keyringBacked.has(a.id) ? { ...a, password: '' } : a
+    ),
+  };
+}
+
+// settings.json holds the OAuth access and refresh tokens, and — until it has been migrated into
+// the keyring — the CalDAV password in plaintext.
 function persistSettings() {
-  writePrivate(SETTINGS_FILE, 'settings.json', JSON.stringify(settings, null, 2));
+  writePrivate(SETTINGS_FILE, 'settings.json', JSON.stringify(settingsForDisk(), null, 2));
 }
 
 export function loadFeeds() {
@@ -281,7 +298,34 @@ export function addCaldavAccount(account) {
 
 export function removeCaldavAccount(id) {
   settings.caldavAccounts = (settings.caldavAccounts || []).filter((a) => a.id !== id);
+  keyringBacked.delete(id);
   persistSettings();
+}
+
+/**
+ * Drops an account's plaintext password from settings.json, once its keyring copy has been written
+ * AND read back intact. Called only by the migration in src/secrets.js — calling it before the
+ * keyring holds a verified copy would destroy the only copy of the password.
+ */
+export function clearCaldavPassword(id) {
+  const account = (settings.caldavAccounts || []).find((a) => a.id === id);
+  if (!account) return null;
+  keyringBacked.add(id);
+  account.password = '';
+  persistSettings();
+  return account;
+}
+
+/**
+ * Puts a keyring-held password back into the in-memory account at startup, so the CalDAV callers
+ * keep working unchanged. Deliberately does not persist: this value must stay out of settings.json.
+ */
+export function hydrateCaldavPassword(id, password) {
+  const account = (settings.caldavAccounts || []).find((a) => a.id === id);
+  if (!account || typeof password !== 'string' || password === '') return null;
+  keyringBacked.add(id);
+  account.password = password;
+  return account;
 }
 
 /** Replace the calendar list for an account (after selection). */
