@@ -43,8 +43,11 @@ import {
   getTokens,
   saveTokens,
   setEventImportant,
+  clearCaldavPassword,
+  hydrateCaldavPassword,
   DATA_DIR,
 } from './src/store.js';
+import { migratePlaintextPasswords, hydrateKeyringPasswords } from './src/secrets.js';
 import {
   discoverCalendars,
   createCalDavEvent,
@@ -64,6 +67,13 @@ const app = express();
 
 loadFeeds();
 loadSettings();
+
+// The CalDAV password belongs in the keyring, not settings.json. Migration blanks the plaintext
+// copy only after reading the keyring copy back intact; hydration then puts it back in memory, so
+// every CalDAV call site below goes on reading `account.password` unchanged while the store keeps
+// that value off disk. With no keyring on the machine both steps no-op.
+await migratePlaintextPasswords({ getCaldavAccounts, clearCaldavPassword });
+await hydrateKeyringPasswords({ getCaldavAccounts, hydrateCaldavPassword });
 
 const ICS_PALETTE = ['#9333ea', '#ea580c', '#0891b2', '#db2777', '#ca8a04'];
 
