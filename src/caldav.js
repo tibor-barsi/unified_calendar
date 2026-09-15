@@ -238,8 +238,15 @@ export async function fetchCalDavEvents(account, calendar, timeMin, timeMax) {
 
 // ── iCal generation ──
 
+// Escaping LF but not CR left a raw `\r` mid-content-line, which both destroyed the property on
+// read-back (a content-line regex cannot match across it) and let a title or description open what
+// looks like a new property line. CRLF collapses to one escaped newline, per RFC 5545 3.3.11.
 function escText(s) {
-  return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  return String(s || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r\n|\r|\n/g, '\\n');
 }
 
 function addOneDay(ymd) {
