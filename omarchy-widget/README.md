@@ -91,8 +91,46 @@ through Omarchy's own settings UI:
 | `upcomingDays` | `30` (1–60) | how far ahead the "★ N upcoming" list looks. |
 | `upcomingMax` | `5` (1–20) | how many entries that list shows. |
 | `refreshMinutes` | `15` (5–240) | polling interval. Failures back off to 30 s, 30 s, 60 s, 120 s, 300 s, then this. |
+| `navKeys` | see below | what the arrow keys and `hjkl` move by. |
 
 `SUPER+SHIFT+C` opens the panel.
+
+## Keys
+
+| Key | Does |
+|---|---|
+| `h` `l` | previous / next **day** |
+| `j` `k` | next / previous **week** |
+| `←` `→` | previous / next **month** |
+| `↑` `↓` | previous / next **year** |
+| `[` `]` | previous / next month (fixed) |
+| `{` `}` | previous / next year (fixed) |
+| `t`, `Enter` | today |
+| `w` | toggle the week start |
+| `u` | toggle the upcoming list |
+| `Esc` | close the selected day, then the panel |
+
+The first `h`/`j`/`k`/`l` press puts a day cursor on today — or on the 1st, if
+you have browsed away from this month — and opens that day's events below the
+grid. After that every key moves the cursor, coarse units included: with a day
+selected `←` steps it a month, not the view. With no day selected the arrows
+browse the month grid, which is what Omarchy's own clock does.
+
+`navKeys` maps each key family to a unit per axis, so the two families can
+cover different scales without a modifier:
+
+```json
+"navKeys": {
+  "letters": { "horizontal": "day",  "vertical": "week"  },
+  "arrows":  { "horizontal": "month", "vertical": "year" }
+}
+```
+
+Units are `day`, `week`, `month`, `year` and `none` (the axis does nothing).
+Those values are the defaults; anything unrecognised falls back to the default
+for that slot, so a typo leaves the key working rather than dead. Giving
+`letters` the same `month`/`year` pair as `arrows` restores the stock clock's
+keys exactly — the day cursor is then reachable only by clicking.
 
 ## IPC
 
