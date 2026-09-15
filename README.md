@@ -105,9 +105,18 @@ Leave `AUTH_PASSWORD` unset (or remove it) to disable authentication entirely.
 ## Reaching it from another machine
 
 The app binds to **`127.0.0.1`** — this machine only. That is deliberate: with no
-`AUTH_PASSWORD` set there is no login at all, and `data/settings.json` holds OAuth
-refresh tokens and, for CalDAV, a password in plaintext. Listening on every
-interface would hand a personal calendar to anyone who can reach the port.
+`AUTH_PASSWORD` set there is no login at all, and `data/settings.json` always
+holds OAuth refresh tokens in plaintext — the CalDAV password too, on a machine
+with no system keyring (below). Listening on every interface would hand a
+personal calendar to anyone who can reach the port.
+
+The CalDAV password doesn't have to be one of those plaintext copies: on first
+start the server moves it out of `data/settings.json` and into the system
+keyring (`secret-tool`, i.e. libsecret — gnome-keyring or any other Secret
+Service provider), blanking the plaintext copy only once it has read the
+keyring copy back and confirmed it matches. With no keyring on the machine — no
+`secret-tool`, a locked one, whatever — the plaintext copy just keeps working,
+so the keyring is an enhancement, not a dependency.
 
 `HOST=0.0.0.0` opens it up. Only do that together with `AUTH_PASSWORD`, and
 preferably not on its own — the app speaks plain HTTP, so a password travels in
