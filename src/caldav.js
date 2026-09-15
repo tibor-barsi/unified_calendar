@@ -2,12 +2,22 @@ import axios from 'axios';
 import ical from 'node-ical';
 import crypto from 'node:crypto';
 import { XMLParser } from 'fast-xml-parser';
+import { normalizeVtodo, buildVtodoIcal } from './tasks.js';
 
 const xmlParser = new XMLParser({
   removeNSPrefix: true,
   ignoreAttributes: false,
   isArray: (name) => ['response', 'propstat'].includes(name),
 });
+
+// ── Test seam ──
+// No mocking library is a dependency here, so tests substitute the HTTP transport itself: every
+// axios call in this module goes through `requestFn` instead of `axios.request` directly.
+// Production code never calls __setRequestFn; it exists purely for test/caldav-tasks.test.js.
+let requestFn = (config) => axios.request(config);
+export function __setRequestFn(fn) {
+  requestFn = fn ?? ((config) => axios.request(config));
+}
 
 // ── Helpers ──
 
@@ -33,7 +43,7 @@ function getResponses(parsed) {
 }
 
 async function propfind(url, username, password, body, depth) {
-  const resp = await axios.request({
+  const resp = await requestFn({
     method: 'PROPFIND',
     url,
     data: body,
@@ -99,7 +109,11 @@ function assignCalendarIds(accountId, calendars) {
   });
 }
 
-async function listCalendarsAtHome(homeUrl, username, password, accountId) {
+// Shared PROPFIND walk for both event calendars and task lists: same request, same resourcetype
+// filter, same name/color extraction. Callers filter the result by `compSet` for the component
+// they care about (VEVENT vs VTODO) — kept as raw values so a collection advertising both (as
+// task discovery's tests check for) matches either filter.
+async function walkCalendarCollections(homeUrl, username, password) {
   const base = new URL(homeUrl).origin;
   const body = `<?xml version="1.0" encoding="utf-8"?>
 <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"
@@ -114,7 +128,7 @@ async function listCalendarsAtHome(homeUrl, username, password, accountId) {
 
   const parsed = await propfind(homeUrl, username, password, body, '1');
   if (!parsed) return [];
-  const calendars = [];
+  const collections = [];
 
   for (const r of getResponses(parsed)) {
     const prop = getOkProp(r.propstat);
@@ -122,9 +136,6 @@ async function listCalendarsAtHome(homeUrl, username, password, accountId) {
 
     const rt = prop.resourcetype;
     if (!rt || typeof rt !== 'object' || !('calendar' in rt)) continue;
-
-    const compSet = prop['supported-calendar-component-set'];
-    if (compSet && !JSON.stringify(compSet).toLowerCase().includes('vevent')) continue;
 
     const href = resolveUrl(base, String(r.href ?? ''));
     if (!href) continue;
@@ -134,16 +145,46 @@ async function listCalendarsAtHome(homeUrl, username, password, accountId) {
     let color = prop['calendar-color'] ? String(prop['calendar-color']).slice(0, 7) : null;
     if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) color = null;
 
-    calendars.push({ url: href, name, color });
+    collections.push({ url: href, name, color, compSet: prop['supported-calendar-component-set'] });
   }
 
+  return collections;
+}
+
+function componentSetIncludes(compSet, component) {
+  return Boolean(compSet) && JSON.stringify(compSet).toLowerCase().includes(component.toLowerCase());
+}
+
+async function listCalendarsAtHome(homeUrl, username, password, accountId) {
+  const collections = await walkCalendarCollections(homeUrl, username, password);
+  // Unchanged from before the refactor: a collection with no supported-calendar-component-set at
+  // all is kept (assumed to be an event calendar); one that declares a set must include VEVENT.
+  const calendars = collections
+    .filter((c) => !c.compSet || componentSetIncludes(c.compSet, 'vevent'))
+    .map(({ url, name, color }) => ({ url, name, color }));
   return assignCalendarIds(accountId, calendars);
+}
+
+async function listTaskListsAtHome(homeUrl, username, password, accountId) {
+  const collections = await walkCalendarCollections(homeUrl, username, password);
+  const lists = collections
+    .filter((c) => componentSetIncludes(c.compSet, 'vtodo'))
+    .map(({ url, name, color }) => ({ url, name, color }));
+  return assignCalendarIds(accountId, lists);
 }
 
 export async function discoverCalendars(server, username, password, accountId) {
   const principalUrl = await findPrincipalUrl(server, username, password);
   const homeUrl = await findCalendarHome(principalUrl, username, password);
   return listCalendarsAtHome(homeUrl, username, password, accountId);
+}
+
+// Same PROPFIND walk as discoverCalendars, kept to task-list collections (supported-calendar-
+// component-set contains VTODO) instead of VEVENT ones.
+export async function discoverTaskLists(server, username, password, accountId) {
+  const principalUrl = await findPrincipalUrl(server, username, password);
+  const homeUrl = await findCalendarHome(principalUrl, username, password);
+  return listTaskListsAtHome(homeUrl, username, password, accountId);
 }
 
 // ── Event fetching ──
@@ -198,7 +239,7 @@ export async function fetchCalDavEvents(account, calendar, timeMin, timeMax) {
 
   let resp;
   try {
-    resp = await axios.request({
+    resp = await requestFn({
       method: 'REPORT',
       url: calendar.url,
       data: body,
@@ -238,9 +279,8 @@ export async function fetchCalDavEvents(account, calendar, timeMin, timeMax) {
 
 // ── iCal generation ──
 
-// Escaping LF but not CR left a raw `\r` mid-content-line, which both destroyed the property on
-// read-back (a content-line regex cannot match across it) and let a title or description open what
-// looks like a new property line. CRLF collapses to one escaped newline, per RFC 5545 3.3.11.
+// See the matching note in src/tasks.js: escaping LF but not CR left a bare `\r` on the wire, which
+// both destroyed the property on read-back and let a title or description open a new property line.
 function escText(s) {
   return String(s || '')
     .replace(/\\/g, '\\\\')
@@ -303,7 +343,7 @@ function eventUrl(calUrl, uid) {
 
 export async function createCalDavEvent(account, calendar, eventData) {
   const uid = crypto.randomUUID();
-  const resp = await axios.request({
+  const resp = await requestFn({
     method: 'PUT',
     url: eventUrl(calendar.url, uid),
     data: buildIcal(uid, eventData),
@@ -319,7 +359,7 @@ export async function createCalDavEvent(account, calendar, eventData) {
 }
 
 export async function updateCalDavEvent(account, calendar, uid, eventData) {
-  await axios.request({
+  await requestFn({
     method: 'PUT',
     url: eventUrl(calendar.url, uid),
     data: buildIcal(uid, eventData),
@@ -333,10 +373,124 @@ export async function updateCalDavEvent(account, calendar, uid, eventData) {
 }
 
 export async function deleteCalDavEvent(account, uid, calUrl) {
-  await axios.request({
+  await requestFn({
     method: 'DELETE',
     url: eventUrl(calUrl, uid),
     headers: { Authorization: basicAuth(account.username, account.password) },
     validateStatus: (s) => (s >= 200 && s < 300) || s === 404,
+  });
+}
+
+// ── Tasks (VTODO) ──
+
+export async function fetchCalDavTasks(account, list) {
+  const body = `<?xml version="1.0" encoding="utf-8"?>
+<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop><d:getetag/><c:calendar-data/></d:prop>
+  <c:filter>
+    <c:comp-filter name="VCALENDAR">
+      <c:comp-filter name="VTODO"/>
+    </c:comp-filter>
+  </c:filter>
+</c:calendar-query>`;
+
+  let resp;
+  try {
+    resp = await requestFn({
+      method: 'REPORT',
+      url: list.url,
+      data: body,
+      headers: {
+        Authorization: basicAuth(account.username, account.password),
+        'Content-Type': 'application/xml; charset=utf-8',
+        Depth: '1',
+      },
+      maxRedirects: 5,
+      validateStatus: () => true,
+    });
+  } catch (e) {
+    throw new Error(`CalDAV REPORT failed: ${e.message}`);
+  }
+
+  if (resp.status === 404) return [];
+  if (resp.status !== 207) throw new Error(`CalDAV REPORT returned ${resp.status}`);
+
+  const parsed = typeof resp.data === 'string' ? xmlParser.parse(resp.data) : resp.data;
+  const tasks = [];
+
+  for (const r of getResponses(parsed)) {
+    const prop = getOkProp(r.propstat);
+    const calData = prop?.['calendar-data'];
+    if (!calData) continue;
+    // getetag comes back from OX UNQUOTED (e.g. `1111673-3-1784650673809`) — kept as-is, never
+    // quoted/unquoted here or anywhere downstream, so it round-trips verbatim into If-Match.
+    const etag = prop?.getetag != null ? String(prop.getetag) : null;
+    try {
+      const parsedIcs = ical.parseICS(String(calData));
+      for (const key of Object.keys(parsedIcs)) {
+        const comp = parsedIcs[key];
+        if (!comp || comp.type !== 'VTODO') continue;
+        tasks.push(normalizeVtodo(comp, {
+          listId: list.id, listName: list.name, listUrl: list.url, accountId: account.id, etag,
+        }));
+      }
+    } catch { /* one malformed VTODO must not fail the whole fetch */ }
+  }
+  return tasks;
+}
+
+function vtodoFromIcal(icalText) {
+  return Object.values(ical.parseICS(icalText)).find((c) => c && c.type === 'VTODO');
+}
+
+export async function createCalDavTask(account, list, fields) {
+  const uid = crypto.randomUUID();
+  const icalText = buildVtodoIcal(uid, fields);
+
+  const resp = await requestFn({
+    method: 'PUT',
+    url: eventUrl(list.url, uid),
+    data: icalText,
+    headers: {
+      Authorization: basicAuth(account.username, account.password),
+      'Content-Type': 'text/calendar; charset=utf-8',
+      'If-None-Match': '*',
+    },
+    validateStatus: () => true,
+  });
+  if (resp.status < 200 || resp.status >= 300) throw new Error(`CalDAV PUT failed: ${resp.status}`);
+
+  const etag = resp.headers?.etag != null ? String(resp.headers.etag) : null;
+  return normalizeVtodo(vtodoFromIcal(icalText), {
+    listId: list.id, listName: list.name, listUrl: list.url, accountId: account.id, etag,
+  });
+}
+
+export async function updateCalDavTask(account, list, task, fields) {
+  const headers = {
+    Authorization: basicAuth(account.username, account.password),
+    'Content-Type': 'text/calendar; charset=utf-8',
+  };
+  // Sent back exactly as stored — see the verbatim-etag note in fetchCalDavTasks. Omitted (PUT
+  // unconditional) when we never had one to begin with.
+  if (task.etag != null) headers['If-Match'] = task.etag;
+
+  const icalText = buildVtodoIcal(task.uid, fields);
+  const resp = await requestFn({
+    method: 'PUT',
+    url: eventUrl(list.url, task.uid),
+    data: icalText,
+    headers,
+    validateStatus: () => true,
+  });
+
+  if (resp.status === 412) {
+    throw new Error('CalDAV PUT failed: task was changed on the server since it was last fetched (412 Precondition Failed)');
+  }
+  if (resp.status < 200 || resp.status >= 300) throw new Error(`CalDAV PUT failed: ${resp.status}`);
+
+  const etag = resp.headers?.etag != null ? String(resp.headers.etag) : null;
+  return normalizeVtodo(vtodoFromIcal(icalText), {
+    listId: list.id, listName: list.name, listUrl: list.url, accountId: account.id, etag,
   });
 }
